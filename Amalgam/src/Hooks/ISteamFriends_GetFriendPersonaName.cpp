@@ -13,6 +13,22 @@ MAKE_HOOK(ISteamFriends_GetFriendPersonaName, U::Memory.GetVirtual(I::SteamFrien
 	const auto dwRetAddr = uintptr_t(_ReturnAddress());
 	const auto dwDesired = S::GetPlayerNameForSteamID_GetFriendPersonaName_Call();
 
+if (steamIDFriend == I::SteamUser->GetSteamID())
+{
+    static ConVar* nameVar = I::CVar->FindVar("name");
+    CTFPlayer* pLocal = H::Entities.GetLocal();
+
+    const bool bInGame = I::EngineClient->IsInGame() && pLocal;
+	
+    if (!bInGame)
+    {
+        return CALL_ORIGINAL(rcx, steamIDFriend);
+    }
+	
+    if (nameVar)
+        return nameVar->GetString();
+} //bypass for the name command.
+
 	if (dwRetAddr == dwDesired && Vars::Visuals::UI::StreamerMode.Value)
 	{
 		switch (F::PlayerUtils.GetNameType(steamIDFriend.GetAccountID()))
