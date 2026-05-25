@@ -6,6 +6,10 @@ MAKE_HOOK(CAchievementMgr_CheckAchievementsEnabled, S::CAchievementMgr_CheckAchi
 	void* rcx)
 {
 	DEBUG_RETURN(CAchievementMgr_CheckAchievementsEnabled, rcx);
-
+#ifdef TEXTMODE
+	return false;
+#else
 	return !I::EngineClient->IsPlayingDemo();
+#endif
 }
+//In theory, this prevents you from unlocking achievements in TF2. But it does this for text mode, so the message that achievements have been unlocked on Steam doesn't appear.
