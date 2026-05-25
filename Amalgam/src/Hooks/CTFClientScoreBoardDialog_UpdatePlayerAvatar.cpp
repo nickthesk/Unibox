@@ -1,7 +1,7 @@
 #include "../SDK/SDK.h"
 
 #include "../Features/Players/PlayerUtils.h"
-
+//It will probably be used to steal a player's profile picture.
 MAKE_SIGNATURE(CAvatarImage_SetAvatarSteamID, "client.dll", "48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC ? 66 C7 41", 0x0);
 MAKE_SIGNATURE(CAvatarImagePanel_SetPlayer, "client.dll", "48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC ? 48 8B F9 33 F6 48 8B 89 ? ? ? ? 48 8B DA", 0x0);
 MAKE_SIGNATURE(CTFClientScoreBoardDialog_UpdatePlayerAvatar, "client.dll", "4D 85 C0 0F 84 ? ? ? ? 53 41 54 41 57", 0x0);
