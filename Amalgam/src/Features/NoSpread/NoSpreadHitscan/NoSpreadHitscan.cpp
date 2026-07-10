@@ -2,6 +2,7 @@
 
 #include "../../Ticks/Ticks.h"
 #include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
+#include "../../ImGui/IndicatorPanel.h"
 #include <regex>
 #include <numeric>
 
@@ -205,13 +206,41 @@ void CNoSpreadHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* 
 
 void CNoSpreadHitscan::Draw(CTFPlayer* pLocal)
 {
-	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::SeedPrediction) || !ShouldRun() || !pLocal->IsAlive())
+	static std::string sUptime = {};
+	static std::string sMantissaStep = {};
+	static std::string sDelta = {};
+	static Color_t tCachedColor = {};
+	static bool bCachedValid = false;
+
+	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::SeedPrediction))
+	{
+		bCachedValid = false;
+		return;
+	}
+
+	if (pLocal)
+	{
+		if (!ShouldRun() || !pLocal->IsAlive())
+		{
+			bCachedValid = false;
+			return;
+		}
+
+		tCachedColor = m_bSynced ? Vars::Menu::Theme::Active.Value : Vars::Menu::Theme::Inactive.Value;
+		sUptime = std::format("Uptime {}", GetFormat(m_flServerTime));
+		sMantissaStep = std::format("Mantissa step {}", m_flMantissaStep);
+		sDelta = std::format("Delta {:.3f}", m_dTimeDelta);
+		bCachedValid = true;
+	}
+
+	if (!bCachedValid)
 		return;
 
 	int x = Vars::Menu::SeedPredictionDisplay.Value.x;
 	int y = Vars::Menu::SeedPredictionDisplay.Value.y + 8;
 	const auto& fFont = H::Fonts.GetFont(FONT_INDICATORS);
 	const int nTall = fFont.m_nTall + H::Draw.Scale(1);
+	ImDrawList* pDrawList = ImGui::GetForegroundDrawList();
 
 	EAlign align = ALIGN_TOP;
 	if (x <= 100 + H::Draw.Scale(50, Scale_Round))
@@ -225,10 +254,8 @@ void CNoSpreadHitscan::Draw(CTFPlayer* pLocal)
 		align = ALIGN_TOPRIGHT;
 	}
 
-	const auto& cColor = m_bSynced ? Vars::Menu::Theme::Active.Value : Vars::Menu::Theme::Inactive.Value;
-
-	H::Draw.StringOutlined(fFont, x, y, cColor, Vars::Menu::Theme::Background.Value, align, std::format("Uptime {}", GetFormat(m_flServerTime)).c_str());
-	H::Draw.StringOutlined(fFont, x, y += nTall, cColor, Vars::Menu::Theme::Background.Value, align, std::format("Mantissa step {}", m_flMantissaStep).c_str());
+	DrawIndicatorText(pDrawList, x, y, tCachedColor, Vars::Menu::Theme::Background.Value, align, sUptime);
+	DrawIndicatorText(pDrawList, x, y += nTall, tCachedColor, Vars::Menu::Theme::Background.Value, align, sMantissaStep);
 	if (Vars::Debug::Info.Value)
-		H::Draw.StringOutlined(fFont, x, y += nTall, cColor, Vars::Menu::Theme::Background.Value, align, std::format("Delta {:.3f}", m_dTimeDelta).c_str());
+		DrawIndicatorText(pDrawList, x, y += nTall, tCachedColor, Vars::Menu::Theme::Background.Value, align, sDelta);
 }

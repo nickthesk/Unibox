@@ -171,7 +171,6 @@ public:
 NAMESPACE_BEGIN(Vars)
 	NAMESPACE_BEGIN(Config)
 		CVar(LoadDebugSettings, "Load debug settings", false);
-		CVar(AutoLoadCheaterConfig, "Auto load cheater config", false);
 		CVar(SteamWebAPIKey, "steamwebapi key", std::string(""), NOBIND);
 	NAMESPACE_END(Config)
 	
@@ -202,10 +201,10 @@ NAMESPACE_BEGIN(Vars)
 		CVar(CheapText, "Cheap text", false, NOBIND);
 
 		NAMESPACE_BEGIN(Theme)
-			CVar(Accent, "Accent color", Color_t(175, 150, 255, 255), VISUAL);
-			CVar(Background, "Background color", Color_t(0, 0, 0, 250), VISUAL);
-			CVar(Active, "Active color", Color_t(255, 255, 255, 255), VISUAL);
-			CVar(Inactive, "Inactive color", Color_t(150, 150, 150, 255), VISUAL);
+			CVar(Accent, "Accent color", Color_t(149, 139, 209, 255), VISUAL);
+			CVar(Background, "Background color", Color_t(31, 29, 53, 250), VISUAL);
+			CVar(Active, "Active color", Color_t(229, 226, 238, 255), VISUAL);
+			CVar(Inactive, "Inactive color", Color_t(159, 159, 219, 255), VISUAL);
 		NAMESPACE_END(Theme)
 	NAMESPACE_END(Menu)
 
@@ -347,7 +346,7 @@ NAMESPACE_BEGIN(Vars)
 			CVarEnum(StrafePrediction, VA_LIST("Predict", "Strafe prediction"), 0b11, DROPDOWN_MULTI, "Off",
 				VA_LIST("Air strafing", "Ground strafing"),
 				Air = 1 << 0, Ground = 1 << 1);
-			CVarEnum(SplashPrediction, VA_LIST("Splash", "Splash prediction"), 0, NONE, nullptr,
+			CVarEnum(SplashPrediction, VA_LIST("Splash", "Splash prediction"), 2, NONE, nullptr,
 				VA_LIST("Off", "Include", "Prefer", "Only"),
 				Off, Include, Prefer, Only);
 			CVarEnum(AutoDetonate, "Auto detonate", 0b00, DROPDOWN_MULTI, "Off",
@@ -359,13 +358,13 @@ NAMESPACE_BEGIN(Vars)
 			CVarEnum(Hitboxes, VA_LIST("Hitboxes", "Projectile hitboxes"), 0b001111, DROPDOWN_MULTI, nullptr,
 				VA_LIST("Auto", "##Divider", "Head", "Body", "Feet", "##Divider", "Bodyaim if lethal", "Prioritize feet"),
 				Auto = 1 << 0, Head = 1 << 1, Body = 1 << 2, Feet = 1 << 3, BodyaimIfLethal = 1 << 4, PrioritizeFeet = 1 << 5);
-			CVarEnum(Modifiers, VA_LIST("Modifiers", "Projectile modifiers"), 0b0010, DROPDOWN_MULTI, nullptr,
+			CVarEnum(Modifiers, VA_LIST("Modifiers", "Projectile modifiers"), 0b011111, DROPDOWN_MULTI, nullptr,
 				VA_LIST("Charge weapon", "Cancel charge", "Use arm time", "Air splash", "Lob angles", "Target dormant"),
 				ChargeWeapon = 1 << 0, CancelCharge = 1 << 1, UseArmTime = 1 << 2, AirSplash = 1 << 3, LobAngles = 1 << 4, TargetDormant = 1 << 5);
-			CVar(MaxSimulationTime, "Max simulation time", 1.f, SLIDER_MIN | SLIDER_PRECISION, 0.1f, 2.5f, 0.25f, "%gs");
+			CVar(MaxSimulationTime, "Max simulation time", 2.5f, SLIDER_MIN | SLIDER_PRECISION, 0.1f, 2.5f, 0.25f, "%gs");
 			CVar(HitChance, "Hit chance", 0.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 10.f, "%g%%");
 			CVar(AutodetRadius, "Autodet radius", 90.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 10.f, "%g%%");
-			CVar(SplashRadius, "Splash radius", 90.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 10.f, "%g%%");
+			CVar(SplashRadius, "Splash radius", 100.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 10.f, "%g%%");
 			CVar(AutoRelease, "Auto release", 0.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 5.f, "%g%%");
 			CVar(GrapplingHookAim, "Grappling hook aim", false);
 
@@ -400,23 +399,23 @@ NAMESPACE_BEGIN(Vars)
 			CVar(HuntsmanPullPoint, "Huntsman pull point", false, NOSAVE | DEBUGVAR);
 			CVar(HuntsmanPullNoZ, "Pull no Z", false, NOSAVE | DEBUGVAR);
 
-			CVarEnum(SplashMode, "Splash mode", 0, NOSAVE | DEBUGVAR, nullptr,
+			CVarEnum(SplashMode, "Splash mode", 1, NOSAVE | DEBUGVAR, nullptr,
 				VA_LIST("Trace", "Face"),
 				Trace, Face);
-			CVar(SplashAirCount, "Splash air count", 0, NOSAVE | DEBUGVAR | SLIDER_MIN, 0, 10);
+			CVar(SplashAirCount, "Splash air count", 4, NOSAVE | DEBUGVAR | SLIDER_MIN, 0, 10);
 			CVar(SplashPointsDirect, "Splash points direct", 100, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0, 400, 5);
 			CVar(SplashPointsArc, "Splash points arc", 100, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0, 400, 5);
 			CVar(SplashRotateX, "Splash Rx", -1.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, -1.f, 360.f);
 			CVar(SplashRotateY, "Splash Ry", -1.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, -1.f, 360.f);
-			CVar(SplashDensityDirect, "Splash density direct", 40.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 100.f, 1.f);
-			CVar(SplashDensityArc, "Splash density arc", 40.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 100.f, 1.f);
+			CVar(SplashDensityDirect, "Splash density direct", 55.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 100.f, 1.f);
+			CVar(SplashDensityArc, "Splash density arc", 65.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 100.f, 1.f);
 			CVar(SplashSamplesCutoff, "Splash samples cutoff", 0.0000001f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 0.000001f, 0.00000001f);
 			CVar(SplashRestrictDirect, "Splash restrict direct", 100, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 1, 400, 5);
-			CVar(SplashRestrictArc, "Splash restrict arc", 5, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 1, 400, 5);
-			CVar(SplashRestrictFirst, "Splash restrict first", 25, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 1, 400, 5);
+			CVar(SplashRestrictArc, "Splash restrict arc", 25, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 1, 400, 5);
+			CVar(SplashRestrictFirst, "Splash restrict first", 50, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 1, 400, 5);
 			CVar(DirectTraceInterval, "Direct trace interval", 1, NOSAVE | DEBUGVAR | SLIDER_MIN, 1, 20);
-			CVar(SplashTraceInterval, "Splash trace interval", 10, NOSAVE | DEBUGVAR | SLIDER_MIN, 1, 20);
-			CVar(LobTraceInterval, "Lob trace interval", 20, NOSAVE | DEBUGVAR | SLIDER_MIN, 1, 20);
+			CVar(SplashTraceInterval, "Splash trace interval", 5, NOSAVE | DEBUGVAR | SLIDER_MIN, 1, 20);
+			CVar(LobTraceInterval, "Lob trace interval", 10, NOSAVE | DEBUGVAR | SLIDER_MIN, 1, 20);
 			CVar(IntervalRetest, "Interval retest", true, NOSAVE | DEBUGVAR);
 
 			CVar(DeltaCount, "Delta count", 5, NOSAVE | DEBUGVAR, 1, 5);
@@ -474,7 +473,7 @@ NAMESPACE_BEGIN(Vars)
 			CVar(ActivateOnVoice, "Activate on voice", false);
 			CVar(ActivateFriendsOnly, "Activate friends only", false);
 			CVar(ActivationHealthPercent, "Activate at health", 0.f, SLIDER_MIN | SLIDER_PRECISION, 0.f, 100.f, 5.f, "%g%%");
-			CVar(AutoSwitchHealth, "Switch at", 75, SLIDER_CLAMP, 75, 200);
+			CVar(AutoSwitchHealth, "Switch at", 75, SLIDER_CLAMP, 1, 100, 1, "%i%%");
 
 			CVar(AutoVaccinatorBulletScale, "Auto vaccinator bullet scale", 100.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 200.f, 10.f, "%g%%");
 			CVar(AutoVaccinatorBlastScale, "Auto vaccinator blast scale", 100.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 200.f, 10.f, "%g%%");
@@ -753,7 +752,7 @@ NAMESPACE_BEGIN(Vars)
 			CVar(ForwardCutoff, "Forward cutoff", 0.1f, NOSAVE | DEBUGVAR | SLIDER_PRECISION, 0.f, 1.f, 0.1f);
 			CVar(Hull, "Hull", 0.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 10.f, 0.5f);
 			CVar(Speed, "Speed", 1100.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 5000.f, 50.f);
-			CVar(Gravity, "Gravity", 0.f, NOSAVE | DEBUGVAR | SLIDER_PRECISION, 0.f, 1.f, 0.1f);
+			CVar(Gravity, "Gravity", 0.f, NOSAVE | DEBUGVAR | SLIDER_PRECISION, 0.f, 800.f, 100.f);
 			CVar(LifeTime, "Life time", 10.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 10.f, 0.1f);
 			CVar(UpVelocity, "Up velocity", 0.f, NOSAVE | DEBUGVAR | SLIDER_PRECISION, 0.f, 1000.f, 50.f);
 			CVar(AngularVelocityX, "Angular velocity X", 0.f, NOSAVE | DEBUGVAR | SLIDER_PRECISION, -1000.f, 1000.f, 50.f);
@@ -827,14 +826,14 @@ I dont think this is a good idea to disable simulations completely:
 					Off, Plain, Silent, Legit, LegitSilent);
 
 				CVar(StickyIgnoreTime, "Sticky ignore time", 15, SLIDER_MIN, 15, 100, 5, "%is");
-				CVar(StuckDetectTime, "Stuck detect time", 2, SLIDER_MIN, 2, 26, 2, "%is");
-				CVar(StuckBlacklistTime, "Stuck blacklist time", 60, SLIDER_MIN, 20, 600, 20, "%is");
-				CVar(StuckExpireTime, "Stuck expire time", 5, SLIDER_MIN, 5, 100, 5, "%is");
-				CVar(StuckTime, "Stuck time", 0.2f, SLIDER_MIN, 0.25f, 0.9f, 0.05f, "%gs");
+				CVar(StuckDetectTime, "Stuck detect time", 1, SLIDER_MIN, 1, 26, 1, "%is");
+				CVar(StuckBlacklistTime, "Stuck blacklist time", 90, SLIDER_MIN, 20, 600, 20, "%is");
+				CVar(StuckExpireTime, "Stuck expire time", 20, SLIDER_MIN, 5, 100, 5, "%is");
+				CVar(StuckTime, "Stuck time", 0.25f, SLIDER_MIN, 0.25f, 0.9f, 0.05f, "%gs");
 
-				CVar(VischeckEnabled, "Vischeck enabled", false);
-				CVar(VischeckTime, "Vischeck time", 2.f, SLIDER_MIN, 0.005f, 3.f, 0.005f, "%gs");
-				CVar(VischeckCacheTime, "Vischeck cache time", 90, SLIDER_MIN, 10, 500, 10, "%is");
+				CVar(VischeckEnabled, "Vischeck enabled", true);
+				CVar(VischeckTime, "Vischeck time", 0.25f, SLIDER_MIN, 0.005f, 3.f, 0.005f, "%gs");
+				CVar(VischeckCacheTime, "Vischeck cache time", 45, SLIDER_MIN, 10, 500, 10, "%is");
 			NAMESPACE_END(NavEngine)
 
 			NAMESPACE_BEGIN(BotUtils)
@@ -853,7 +852,7 @@ I dont think this is a good idea to disable simulations completely:
 
 			NAMESPACE_BEGIN(NavBot)
 				CVar(Enabled, VA_LIST("Enabled", "Navbot enabled"), false);
-				CVarEnum(Blacklist, "Blacklist", 0b0101111, DROPDOWN_MULTI, "None",
+				CVarEnum(Blacklist, "Blacklist", 0b0111111, DROPDOWN_MULTI, "None",
 					VA_LIST("Normal threats", "Dormant threats", "##Divider", "Players", "Stickies", "Projectiles", "Sentries"),
 					NormalThreats = 1 << 0, DormantThreats = 1 << 1, Players = 1 << 2, Stickies = 1 << 3, Projectiles = 1 << 4, Sentries = 1 << 5);
 
@@ -861,14 +860,14 @@ I dont think this is a good idea to disable simulations completely:
 				CVar(BlacklistDormantDelay, "Blacklist dormant scan delay", 1.f, SLIDER_MIN, 0.5f, 5.f, 0.5f, "%gs");
 				CVar(BlacklistSlightDangerLimit, "Blacklist slight danger limit", 2, SLIDER_MIN, 1, 10);
 
-				CVar(SmartJump, "Smart jump", false);
+				CVar(SmartJump, "Smart jump", true);
 
 				CVarEnum(RechargeDT, "Recharge DT", 0, NONE, nullptr,
 					VA_LIST("Off", "On", "If not fakelagging"),
 					Off, Always, WaitForFL);
 				CVar(RechargeDTDelay, "Recharge DT delay", 5, SLIDER_MIN, 0, 10, 1, "%is");
 
-				CVarEnum(Preferences, "Preferences", 0b0, DROPDOWN_MULTI, nullptr,
+				CVarEnum(Preferences, "Preferences", 0b100001111110111, DROPDOWN_MULTI, nullptr,
 					VA_LIST("Get health", "Get ammo", "Reload weapons", "Stalk enemies", "Defend objectives", "Capture objectives", "Help capture objectives", "Escape danger", "Safe capping", "Target sentries", "Auto engie", "##Divider", "Target sentries low range", "Help capture objective friend only", "Dont escape danger with intel", "Group with others"),
 					SearchHealth = 1 << 0, SearchAmmo = 1 << 1, ReloadWeapons = 1 << 2, StalkEnemies = 1 << 3, DefendObjectives = 1 << 4, CaptureObjectives = 1 << 5, HelpCaptureObjectives = 1 << 6, EscapeDanger = 1 << 7, SafeCapping = 1 << 8, TargetSentries = 1 << 9, AutoEngie = 1 << 10, TargetSentriesLowRange = 1 << 11, HelpFriendlyCaptureObjectives = 1 << 12, DontEscapeDangerIntel = 1 << 13, GroupWithOthers = 1 << 14);
 				CVar(MeleeTargetRange, "Melee target range", 600, NONE, 150, 4000, 50);
@@ -889,6 +888,10 @@ I dont think this is a good idea to disable simulations completely:
 				CVarEnum(Targets, "Targets", 0b01, DROPDOWN_MULTI, nullptr,
 					VA_LIST("Teammates", "Enemies"),
 					Teammates = 1 << 0, Enemies = 1 << 1);
+
+				CVarEnum(Prefer, "Prefer", 0, NONE, nullptr,
+					VA_LIST("Off", "Prefer friends", "Party members"),
+					Off, PreferFriends, PartyMembers);
 
 				CVarEnum(LookAtPath, "Look at path", 0, NONE, nullptr,
 					VA_LIST("Off", "Plain", "Silent"),
@@ -933,7 +936,7 @@ I dont think this is a good idea to disable simulations completely:
 				VA_LIST("Off", "Retry", "Retry on death"),
 				Off, Retry, RetryOnDeath);
 			CVar(AutoRetry, "Auto retry", false);
-			CVar(AutoRetryHealth, "Retry below health", 35, SLIDER_CLAMP, 1, 450, 1, "%i HP");
+			CVar(AutoRetryHealth, "Retry below health", 35, SLIDER_CLAMP, 1, 100, 1, "%i%%");
 			CVar(TauntControl, "Taunt control", false);
 			CVar(KartControl, "Kart control", false);
 			CVar(AutoDisguise, "Auto disguise", false);
@@ -1143,7 +1146,6 @@ I dont think this is a good idea to disable simulations completely:
 			CVar(RandomClassInterval, "Random class interval", FloatRange_t(3.f, 5.f), SLIDER_MIN | SLIDER_PRECISION, 0.5f, 30.f, 0.5f, "%g - %gm");
 			CVar(ForceClass, "Autojoin class", 0);
 			CVar(JoinSpam, "Join spam", false);
-			CVar(AutoBanJoiner, "Auto-ban joiner", false);
 			CVar(Micspam, "Micspam", false);
 			CVar(NoiseSpam, "Noise spam", false);
 			CVar(CallVoteSpam, "Callvote spam", false);
@@ -1160,7 +1162,6 @@ I dont think this is a good idea to disable simulations completely:
 				CVar(TeamChat, "Team chat", false);
 				CVar(Randomize, "Randomize", false);
 				CVar(AutoReply, "Auto reply", false);
-				CVar(ChatRelay, "Chat relay", false);
 				CVar(VoteKickReply, "Vote kick reply", false);
 			NAMESPACE_END(ChatSpam)
 
@@ -1191,7 +1192,6 @@ I dont think this is a good idea to disable simulations completely:
 			CVar(CheatsBypass, "Cheats bypass", false);
 			CVar(UnlockCVars, "Unlock CVars", true);
 			CVar(EquipRegionUnlock, "Equip region unlock", false);
-			CVar(PremiumCraftingBypass, "Premium crafting bypass", false);
 			CVar(BreakShootSound, "Break shoot sound", false);
 			CVar(BackpackExpander, "Backpack expander", false);
 			CVar(PingReducer, "Ping reducer", false);
@@ -1282,8 +1282,11 @@ I dont think this is a good idea to disable simulations completely:
 			CVar(InstantRevive, "Instant revive", false);
 			CVar(AllowInspect, "Allow inspect", false);
 			CVar(AutoMvmReadyUp, "Auto MvM ready up", false);
+			CVar(AutoAbandonMannUp, "Auto abandon Mann Up", false);
 			CVar(BuyBot, "Buy Bot", false);
 			CVar(MaxCash, "Turn off buybot at cash", 15000, SLIDER_CLAMP | SLIDER_MIN, 0, 100000, 1000, "%i");
+			CVar(BuyBotAutoClass, "Buy Bot auto class", false);
+			CVar(BuyBotClass, "Buy Bot class", 6);
 		NAMESPACE_END(MannVsMachine)
 
 		NAMESPACE_BEGIN(Sound)
@@ -1304,7 +1307,8 @@ I dont think this is a good idea to disable simulations completely:
 		CVarEnum(NotificationPosition, "Notification position", 0, VISUAL, nullptr,
 			VA_LIST("Top left", "Top right", "Bottom left", "Bottom right"),
 			TopLeft, TopRight, BottomLeft, BottomRight);
-		CVar(Lifetime, "Notification time", 5.f, VISUAL, 0.5f, 5.f, 0.5f);
+		CVar(NotificationTime, "Notification time", 5.f, VISUAL, 0.5f, 5.f, 0.5f);
+		CVar(MaxNotifications, "Max notifications", 10, VISUAL | SLIDER_MIN, 1, 10);
 
 		NAMESPACE_BEGIN(VoteStart, Logging)
 			CVarValues(LogTo, "Vote start log to", 0b000001, DROPDOWN_MULTI, nullptr,

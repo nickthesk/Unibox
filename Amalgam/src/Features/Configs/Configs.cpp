@@ -57,6 +57,19 @@ template <> void CConfigs::SaveJson(boost::property_tree::ptree& t, const std::s
 	t.put_child(s, tChild);
 }
 
+template <> void CConfigs::SaveJson(boost::property_tree::ptree& t, const std::string& s, const std::vector<int>& v)
+{
+	boost::property_tree::ptree tChild;
+	for (int iValue : v)
+	{
+		boost::property_tree::ptree tValue;
+		tValue.put("", iValue);
+		tChild.push_back({ "", tValue });
+	}
+
+	t.put_child(s, tChild);
+}
+
 template <> void CConfigs::SaveJson(boost::property_tree::ptree& t, const std::string& s, const Gradient_t& v)
 {
 	boost::property_tree::ptree tChild;
@@ -195,6 +208,16 @@ template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const 
 			++it;
 		else
 			it = v.erase(it);
+	}
+}
+
+template <> void CConfigs::LoadJson(const boost::property_tree::ptree& t, const std::string& s, std::vector<int>& v)
+{
+	if (auto tChild = t.get_child_optional(s))
+	{
+		v.clear();
+		for (auto& tValue : *tChild | std::views::values)
+			v.push_back(tValue.get_value<int>());
 	}
 }
 
@@ -429,7 +452,7 @@ static inline void LoadMain(BaseVar*& pBase, boost::property_tree::ptree& tTree)
 		}
 	}
 	else if (!(pVar->m_iFlags & NOSAVE))
-		SDK::Output("Amalgam", std::format("{} not found", pVar->Name()).c_str(), ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+		SDK::Output("Amalgam", std::format("{} not found", pVar->Name()).c_str(), ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 }
 #define Load(t, j) if (IsType(t)) LoadMain<t>(pBase, j);
 
@@ -495,6 +518,7 @@ bool CConfigs::SaveConfig(const std::string& sConfigName, bool bNotify)
 				SaveJson(tChild, "TagsOverrideColor", tGroup.m_bTagsOverrideColor);
 				SaveJson(tChild, "Targets", tGroup.m_iTargets);
 				SaveJson(tChild, "Conditions", tGroup.m_iConditions);
+				SaveJson(tChild, "Roles", tGroup.m_vRoles);
 				SaveJson(tChild, "Players", tGroup.m_iPlayers);
 				SaveJson(tChild, "Buildings", tGroup.m_iBuildings);
 				SaveJson(tChild, "Projectiles", tGroup.m_iProjectiles);
@@ -506,7 +530,7 @@ bool CConfigs::SaveConfig(const std::string& sConfigName, bool bNotify)
 				SaveJson(tChild, "OffscreenArrowsMaxDistance", tGroup.m_flOffscreenArrowsMaxDistance);
 				SaveJson(tChild, "PickupTimer", tGroup.m_bPickupTimer);
 				SaveJson(tChild, "Backtrack", tGroup.m_iBacktrack);
-				SaveJson(tChild, "BacktrackChams", tGroup.m_vBacktrackChams);
+				SaveJson(tChild, "BacktrackChams", tGroup.m_tBacktrackChams);
 				SaveJson(tChild, "BacktrackGlow", tGroup.m_tBacktrackGlow);
 				SaveJson(tChild, "Trajectory", tGroup.m_iTrajectory);
 				SaveJson(tChild, "Sightlines", tGroup.m_iSightlines);
@@ -522,11 +546,11 @@ bool CConfigs::SaveConfig(const std::string& sConfigName, bool bNotify)
 
 		m_sCurrentConfig = sConfigName; m_sCurrentVisuals = "";
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Config {} saved", sConfigName).c_str(), DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", std::format("Config {} saved", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Save config failed", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+		SDK::Output("Amalgam", "Save config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 		return false;
 	}
 
@@ -574,7 +598,7 @@ bool CConfigs::LoadConfig(const std::string& sConfigName, bool bNotify)
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Config binds not found", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", "Config binds not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		if (auto tSub = tRead.get_child_optional("Vars");
 			tSub || (tSub = tRead.get_child_optional("ConVars")))
@@ -602,7 +626,7 @@ bool CConfigs::LoadConfig(const std::string& sConfigName, bool bNotify)
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Config vars not found", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", "Config vars not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		if (auto tSub = tRead.get_child_optional("Groups"))
 		{
@@ -614,6 +638,7 @@ bool CConfigs::LoadConfig(const std::string& sConfigName, bool bNotify)
 				LoadJson(tChild, "TagsOverrideColor", tGroup.m_bTagsOverrideColor);
 				LoadJson(tChild, "Targets", tGroup.m_iTargets);
 				LoadJson(tChild, "Conditions", tGroup.m_iConditions);
+				LoadJson(tChild, "Roles", tGroup.m_vRoles);
 				LoadJson(tChild, "Players", tGroup.m_iPlayers);
 				LoadJson(tChild, "Buildings", tGroup.m_iBuildings);
 				LoadJson(tChild, "Projectiles", tGroup.m_iProjectiles);
@@ -625,7 +650,7 @@ bool CConfigs::LoadConfig(const std::string& sConfigName, bool bNotify)
 				LoadJson(tChild, "OffscreenArrowsMaxDistance", tGroup.m_flOffscreenArrowsMaxDistance);
 				LoadJson(tChild, "PickupTimer", tGroup.m_bPickupTimer);
 				LoadJson(tChild, "Backtrack", tGroup.m_iBacktrack);
-				LoadJson(tChild, "BacktrackChams", tGroup.m_vBacktrackChams);
+				LoadJson(tChild, "BacktrackChams", tGroup.m_tBacktrackChams);
 				LoadJson(tChild, "BacktrackGlow", tGroup.m_tBacktrackGlow);
 				LoadJson(tChild, "Trajectory", tGroup.m_iTrajectory);
 				LoadJson(tChild, "Sightlines", tGroup.m_iSightlines);
@@ -634,50 +659,22 @@ bool CConfigs::LoadConfig(const std::string& sConfigName, bool bNotify)
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Config groups not found", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", "Config groups not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		F::Binds.SetVars(nullptr, nullptr, false);
 		H::Fonts.Reload();
 
 		m_sCurrentConfig = sConfigName; m_sCurrentVisuals = "";
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Config {} loaded", sConfigName).c_str(), DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", std::format("Config {} loaded", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Load config failed", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+		SDK::Output("Amalgam", "Load config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 		return false;
 	}
 
 	return true;
-}
-
-void CConfigs::HandleAutoConfig(bool bHasCheater)
-{
-	if (!Vars::Config::AutoLoadCheaterConfig.Value)
-		return;
-
-	const char* sConfigName = nullptr;
-	bool bHasNotLoaded = m_sLoadOriginalConfig.empty();
-	if (bHasCheater && bHasNotLoaded)
-	{
-		m_sLoadOriginalConfig = m_sCurrentConfig;
-		sConfigName = "cheater";
-	}
-	else if (!bHasNotLoaded)
-		sConfigName = m_sLoadOriginalConfig.c_str();
-	else
-		return;
-
-	if (FNV1A::Hash32(m_sCurrentConfig.c_str()) == FNV1A::Hash32(sConfigName))
-		return;
-	else if (!bHasCheater)
-		m_sLoadOriginalConfig.clear();
-
-	if (!std::filesystem::exists(m_sConfigPath + sConfigName + m_sConfigExtension))
-		return;
-
-	LoadConfig(sConfigName, true);
 }
 
 template <class T>
@@ -735,6 +732,7 @@ bool CConfigs::SaveVisual(const std::string& sConfigName, bool bNotify)
 				SaveJson(tChild, "TagsOverrideColor", tGroup.m_bTagsOverrideColor);
 				SaveJson(tChild, "Targets", tGroup.m_iTargets);
 				SaveJson(tChild, "Conditions", tGroup.m_iConditions);
+				SaveJson(tChild, "Roles", tGroup.m_vRoles);
 				SaveJson(tChild, "Players", tGroup.m_iPlayers);
 				SaveJson(tChild, "Buildings", tGroup.m_iBuildings);
 				SaveJson(tChild, "Projectiles", tGroup.m_iProjectiles);
@@ -746,7 +744,7 @@ bool CConfigs::SaveVisual(const std::string& sConfigName, bool bNotify)
 				SaveJson(tChild, "OffscreenArrowsMaxDistance", tGroup.m_flOffscreenArrowsMaxDistance);
 				SaveJson(tChild, "PickupTimer", tGroup.m_bPickupTimer);
 				SaveJson(tChild, "Backtrack", tGroup.m_iBacktrack);
-				SaveJson(tChild, "BacktrackChams", tGroup.m_vBacktrackChams);
+				SaveJson(tChild, "BacktrackChams", tGroup.m_tBacktrackChams);
 				SaveJson(tChild, "BacktrackGlow", tGroup.m_tBacktrackGlow);
 				SaveJson(tChild, "Trajectory", tGroup.m_iTrajectory);
 				SaveJson(tChild, "Sightlines", tGroup.m_iSightlines);
@@ -761,11 +759,11 @@ bool CConfigs::SaveVisual(const std::string& sConfigName, bool bNotify)
 		write_json(m_sVisualsPath + sConfigName + m_sConfigExtension, tWrite);
 
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Visual config {} saved", sConfigName).c_str(), DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", std::format("Visual config {} saved", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Save visuals failed", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+		SDK::Output("Amalgam", "Save visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 		return false;
 	}
 	return true;
@@ -806,7 +804,7 @@ bool CConfigs::LoadVisual(const std::string& sConfigName, bool bNotify)
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Config vars not found", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", "Config vars not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		if (auto tSub = tRead.get_child_optional("Groups"))
 		{
@@ -818,6 +816,7 @@ bool CConfigs::LoadVisual(const std::string& sConfigName, bool bNotify)
 				LoadJson(tChild, "TagsOverrideColor", tGroup.m_bTagsOverrideColor);
 				LoadJson(tChild, "Targets", tGroup.m_iTargets);
 				LoadJson(tChild, "Conditions", tGroup.m_iConditions);
+				LoadJson(tChild, "Roles", tGroup.m_vRoles);
 				LoadJson(tChild, "Players", tGroup.m_iPlayers);
 				LoadJson(tChild, "Buildings", tGroup.m_iBuildings);
 				LoadJson(tChild, "Projectiles", tGroup.m_iProjectiles);
@@ -829,7 +828,7 @@ bool CConfigs::LoadVisual(const std::string& sConfigName, bool bNotify)
 				LoadJson(tChild, "OffscreenArrowsMaxDistance", tGroup.m_flOffscreenArrowsMaxDistance);
 				LoadJson(tChild, "PickupTimer", tGroup.m_bPickupTimer);
 				LoadJson(tChild, "Backtrack", tGroup.m_iBacktrack);
-				LoadJson(tChild, "BacktrackChams", tGroup.m_vBacktrackChams);
+				LoadJson(tChild, "BacktrackChams", tGroup.m_tBacktrackChams);
 				LoadJson(tChild, "BacktrackGlow", tGroup.m_tBacktrackGlow);
 				LoadJson(tChild, "Trajectory", tGroup.m_iTrajectory);
 				LoadJson(tChild, "Sightlines", tGroup.m_iSightlines);
@@ -838,17 +837,17 @@ bool CConfigs::LoadVisual(const std::string& sConfigName, bool bNotify)
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Config groups not found", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", "Config groups not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 
 		F::Binds.SetVars(nullptr, nullptr, false);
 
 		m_sCurrentVisuals = sConfigName;
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Visual config {} loaded", sConfigName).c_str(), DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", std::format("Visual config {} loaded", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Load visuals failed", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+		SDK::Output("Amalgam", "Load visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 		return false;
 	}
 	return true;
@@ -878,11 +877,11 @@ void CConfigs::DeleteConfig(const std::string& sConfigName, bool bNotify)
 			LoadConfig("default", false);
 
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Config {} deleted", sConfigName).c_str(), DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", std::format("Config {} deleted", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Remove config failed", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+		SDK::Output("Amalgam", "Remove config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 	}
 }
 
@@ -917,11 +916,11 @@ void CConfigs::ResetConfig(const std::string& sConfigName, bool bNotify)
 		H::Fonts.Reload();
 
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Config {} reset", sConfigName).c_str(), DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", std::format("Config {} reset", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Reset config failed", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+		SDK::Output("Amalgam", "Reset config failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 	}
 }
 
@@ -932,11 +931,11 @@ void CConfigs::DeleteVisual(const std::string& sConfigName, bool bNotify)
 		std::filesystem::remove(m_sVisualsPath + sConfigName + m_sConfigExtension);
 
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Visual config {} deleted", sConfigName).c_str(), DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", std::format("Visual config {} deleted", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Remove visuals failed", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+		SDK::Output("Amalgam", "Remove visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 	}
 }
 
@@ -969,10 +968,10 @@ void CConfigs::ResetVisual(const std::string& sConfigName, bool bNotify)
 		F::Binds.SetVars(nullptr, nullptr, false);
 
 		if (bNotify)
-			SDK::Output("Amalgam", std::format("Visual config {} reset", sConfigName).c_str(), DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
+			SDK::Output("Amalgam", std::format("Visual config {} reset", sConfigName).c_str(), INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Reset visuals failed", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+		SDK::Output("Amalgam", "Reset visuals failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 	}
 }

@@ -160,7 +160,7 @@ void CGlow::Store(CTFPlayer* pLocal)
 
 		Color_t tColor = F::Groups.GetColor(pEntity, pGroup);
 		Color_t tBacktrackColor = tColor;
-		if (pGroup->m_tGlow()
+		if (pGroup->m_tGlow() && !pEntity->IsWearableVM()
 			&& GetDistanceThing(flDistance, pGroup->m_tGlow, tColor) && SDK::IsOnScreen(pEntity, pEntity->IsBaseCombatWeapon() || pEntity->IsWearable()))
 			m_mEntities[pGroup->m_tGlow].emplace_back(pEntity, tColor);
 
@@ -236,17 +236,14 @@ void CGlow::RenderSecond()
 
 void CGlow::RenderBacktrack(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo)
 {
-	auto pEntityBase = I::ClientEntityList->GetClientEntity(pInfo.entity_index);
-	if (!pEntityBase)
-		return;
-
-	auto pEntity = pEntityBase->As<CTFPlayer>();
-	if (!pEntity->IsPlayer())
+	auto pEntity = I::ClientEntityList->GetClientEntity(pInfo.entity_index)->As<CTFPlayer>();
+	if (!pEntity || !pEntity->IsPlayer())
 		return;
 
 	std::vector<TickRecord*> vRecords = {};
 	if (!F::Backtrack.GetRecords(pEntity, vRecords))
 		return;
+
 	vRecords = F::Backtrack.GetValidRecords(vRecords);
 	if (!vRecords.size())
 		return;
@@ -311,7 +308,7 @@ void CGlow::RenderHandler(const DrawModelState_t& pState, const ModelRenderInfo_
 	}
 }
 
-void CGlow::RenderViewmodel(void* ecx, int flags)
+void CGlow::RenderViewmodel(void* rcx, int flags)
 {
 	if (!F::Groups.GroupsActive())
 		return;
@@ -321,23 +318,22 @@ void CGlow::RenderViewmodel(void* ecx, int flags)
 		return F::Materials.ReloadMaterials();
 
 	Group_t* pGroup = nullptr;
-	if (!F::Groups.GetGroup(TargetsEnum::ViewmodelWeapon, pGroup) || !pGroup->m_tGlow())
+	if (!F::Groups.GetGroup(reinterpret_cast<CBaseAnimating*>(rcx)->IsValid() ? TargetsEnum::ViewmodelHands : TargetsEnum::ViewmodelWeapon, pGroup) || !pGroup->m_tGlow())
 		return;
 
 	static auto CBaseAnimating_InternalDrawModel = U::Hooks.m_mHooks["CBaseAnimating_InternalDrawModel"];
 
 	const int w = H::Draw.m_nScreenW, h = H::Draw.m_nScreenH;
-	pRenderContext->CullMode(MATERIAL_CULLMODE_CCW); // glow won't work properly with MATERIAL_CULLMODE_CW
 
+	pRenderContext->CullMode(MATERIAL_CULLMODE_CCW); // glow won't work properly with MATERIAL_CULLMODE_CW
 	FirstBegin(pRenderContext);
-	CBaseAnimating_InternalDrawModel->Call<int>(ecx, flags);
+	CBaseAnimating_InternalDrawModel->Call<int>(rcx, flags);
 	FirstEnd(pRenderContext);
 	SecondBegin(pRenderContext, w, h);
 	I::RenderView->SetColorModulation(pGroup->m_tColor);
 	I::RenderView->SetBlend(pGroup->m_tColor.a / 255.f);
-	CBaseAnimating_InternalDrawModel->Call<int>(ecx, flags);
+	CBaseAnimating_InternalDrawModel->Call<int>(rcx, flags);
 	SecondEnd(pGroup->m_tGlow, pRenderContext, w, h);
-
 	pRenderContext->CullMode(G::FlipViewmodels ? MATERIAL_CULLMODE_CW : MATERIAL_CULLMODE_CCW);
 }
 void CGlow::RenderViewmodel(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld)
@@ -350,13 +346,12 @@ void CGlow::RenderViewmodel(const DrawModelState_t& pState, const ModelRenderInf
 		return F::Materials.ReloadMaterials();
 
 	Group_t* pGroup = nullptr;
-	if (!F::Groups.GetGroup(TargetsEnum::ViewmodelHands, pGroup) || !pGroup->m_tGlow())
+	if (!F::Groups.GetGroup(TargetsEnum::ViewmodelWeapon, pGroup) || !pGroup->m_tGlow())
 		return;
 
 	static auto IVModelRender_DrawModelExecute = U::Hooks.m_mHooks["IVModelRender_DrawModelExecute"];
 
 	const int w = H::Draw.m_nScreenW, h = H::Draw.m_nScreenH;
-	pRenderContext->CullMode(MATERIAL_CULLMODE_CCW); // glow won't work properly with MATERIAL_CULLMODE_CW
 
 	FirstBegin(pRenderContext);
 	IVModelRender_DrawModelExecute->Call<void>(I::ModelRender, pState, pInfo, pBoneToWorld);
@@ -366,8 +361,6 @@ void CGlow::RenderViewmodel(const DrawModelState_t& pState, const ModelRenderInf
 	I::RenderView->SetBlend(pGroup->m_tColor.a / 255.f);
 	IVModelRender_DrawModelExecute->Call<void>(I::ModelRender, pState, pInfo, pBoneToWorld);
 	SecondEnd(pGroup->m_tGlow, pRenderContext, w, h);
-
-	pRenderContext->CullMode(G::FlipViewmodels ? MATERIAL_CULLMODE_CW : MATERIAL_CULLMODE_CCW);
 }
 
 
@@ -413,24 +406,30 @@ void CGlow::Initialize()
 
 	if (!m_pMatHaloAddToScreen)
 	{
-		KeyValues* kv = new KeyValues("UnlitGeneric");
-		kv->SetString("$basetexture", "RenderBuffer1");
-		kv->SetString("$additive", "1");
-		m_pMatHaloAddToScreen = F::Materials.Create("MatHaloAddToScreen", kv);
+		m_pMatHaloAddToScreen = F::Materials.create_from_vmt("MatHaloAddToScreen",
+			"\"UnlitGeneric\""
+			"\n{"
+			"\n\t$basetexture \"RenderBuffer1\""
+			"\n\t$additive \"1\""
+			"\n}");
 	}
 
 	if (!m_pMatBlurX)
 	{
-		KeyValues* kv = new KeyValues("BlurFilterX");
-		kv->SetString("$basetexture", "RenderBuffer1");
-		m_pMatBlurX = F::Materials.Create("MatBlurX", kv);
+		m_pMatBlurX = F::Materials.create_from_vmt("MatBlurX",
+			"\"BlurFilterX\""
+			"\n{"
+			"\n\t$basetexture \"RenderBuffer1\""
+			"\n}");
 	}
 
 	if (!m_pMatBlurY)
 	{
-		KeyValues* kv = new KeyValues("BlurFilterY");
-		kv->SetString("$basetexture", "RenderBuffer2");
-		m_pMatBlurY = F::Materials.Create("MatBlurY", kv);
+		m_pMatBlurY = F::Materials.create_from_vmt("MatBlurY",
+			"\"BlurFilterY\""
+			"\n{"
+			"\n\t$basetexture \"RenderBuffer2\""
+			"\n}");
 	}
 }
 
