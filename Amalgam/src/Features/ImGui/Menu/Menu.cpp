@@ -283,21 +283,22 @@ void CMenu::DrawMenu()
 	static bool bSetPosition = false;
 	static bool bDraggingMenu = false;
 	static ImVec2 vMenuTargetPos = {};
-	static ImVec2 vMenuAnimPos = {};
 	static ImVec2 vMenuDragOffset = {};
-	ImVec2 vDefaultMenuSize = { H::Draw.Scale(750), H::Draw.Scale(500) };
+	ImVec2 vDefaultMenuSize = { H::Draw.Scale(900), H::Draw.Scale(500) };
 	if (!bSetPosition)
 	{
 		vMenuTargetPos = (GetIO().DisplaySize - vDefaultMenuSize) / 2;
-		vMenuAnimPos = vMenuTargetPos;
+		SetNextWindowPos(vMenuTargetPos, ImGuiCond_Always);
 		bSetPosition = true;
 	}
-	float flDragDelta = std::clamp(GetIO().DeltaTime * 18.f, 0.f, 1.f);
-	vMenuAnimPos = ImLerp(vMenuAnimPos, vMenuTargetPos, flDragDelta);
-	SetNextWindowPos(vMenuAnimPos, ImGuiCond_Always);
+	if (bDraggingMenu)
+	{
+		vMenuTargetPos = GetMousePos() - vMenuDragOffset;
+		SetNextWindowPos(vMenuTargetPos, ImGuiCond_Always);
+	}
 	SetNextWindowSize(vDefaultMenuSize, ImGuiCond_FirstUseEver);
 
-	PushStyleVar(ImGuiStyleVar_WindowMinSize, { H::Draw.Scale(750), H::Draw.Scale(500) });
+	PushStyleVar(ImGuiStyleVar_WindowMinSize, { H::Draw.Scale(900), H::Draw.Scale(500) });
 	if (Begin("Main", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove))
 	{
 		ImVec2 vWindowSize = GetWindowSize();
@@ -408,7 +409,8 @@ void CMenu::DrawMenu()
 		if (bCanDragMenu && IsMouseClicked(ImGuiMouseButton_Left))
 		{
 			bDraggingMenu = true;
-			vMenuDragOffset = vMousePos - vMenuTargetPos;
+			vMenuTargetPos = vDrawPos;
+			vMenuDragOffset = vMousePos - vDrawPos;
 		}
 
 		PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
@@ -1810,7 +1812,7 @@ void CMenu::MenuMisc(int iTab)
 					FTooltip("breaks weapon shoot sound by switching weapons (soldier only)");
 					FToggleSlider(Vars::Misc::Exploits::PingReducer, Vars::Misc::Exploits::PingTarget);
 				} EndSection();
-				if (Section("Mann vs. Machine", 14))
+				if (Section("Mann vs. Machine"))
 				{
 					FToggle(Vars::Misc::MannVsMachine::InstantRespawn, FToggleEnum::Left);
 					FToggle(Vars::Misc::MannVsMachine::InstantRevive, FToggleEnum::Right);
@@ -2143,7 +2145,15 @@ void CMenu::MenuMisc(int iTab)
 				} EndSection();
 				if (Section("Regions", 8))
 				{
-					FDropdown(Vars::Misc::Queueing::ForceRegions, FDropdownEnum::Left);
+					dropdown_with_group_headers(Vars::Misc::Queueing::ForceRegions, FDropdownEnum::Left, 0,
+					{
+						{ 0, "North America", Vars::Misc::Queueing::ForceRegionsEnum::ATL | Vars::Misc::Queueing::ForceRegionsEnum::ORD | Vars::Misc::Queueing::ForceRegionsEnum::DFW | Vars::Misc::Queueing::ForceRegionsEnum::LAX | Vars::Misc::Queueing::ForceRegionsEnum::SEA | Vars::Misc::Queueing::ForceRegionsEnum::IAD },
+						{ 6, "Europe", Vars::Misc::Queueing::ForceRegionsEnum::AMS | Vars::Misc::Queueing::ForceRegionsEnum::FSN | Vars::Misc::Queueing::ForceRegionsEnum::FRA | Vars::Misc::Queueing::ForceRegionsEnum::HEL | Vars::Misc::Queueing::ForceRegionsEnum::LHR | Vars::Misc::Queueing::ForceRegionsEnum::MAD | Vars::Misc::Queueing::ForceRegionsEnum::PAR | Vars::Misc::Queueing::ForceRegionsEnum::STO | Vars::Misc::Queueing::ForceRegionsEnum::VIE | Vars::Misc::Queueing::ForceRegionsEnum::WAW },
+						{ 16, "South America", Vars::Misc::Queueing::ForceRegionsEnum::EZE | Vars::Misc::Queueing::ForceRegionsEnum::LIM | Vars::Misc::Queueing::ForceRegionsEnum::SCL | Vars::Misc::Queueing::ForceRegionsEnum::GRU },
+						{ 20, "Asia", Vars::Misc::Queueing::ForceRegionsEnum::MAA | Vars::Misc::Queueing::ForceRegionsEnum::DXB | Vars::Misc::Queueing::ForceRegionsEnum::HKG | Vars::Misc::Queueing::ForceRegionsEnum::BOM | Vars::Misc::Queueing::ForceRegionsEnum::SEO | Vars::Misc::Queueing::ForceRegionsEnum::SGP | Vars::Misc::Queueing::ForceRegionsEnum::TYO },
+						{ 27, "Australia", Vars::Misc::Queueing::ForceRegionsEnum::SYD },
+						{ 28, "Africa", Vars::Misc::Queueing::ForceRegionsEnum::JNB }
+					});
 					FDropdown(Vars::Misc::Queueing::ExtendQueue, FDropdownEnum::Right);
 				} EndSection();
 			}
@@ -2306,27 +2316,41 @@ void CMenu::MenuAnticheat(int iTab)
 		EndSection();
 		if (Section("Cheater List"))
 		{
+			static std::string cheater_search = "";
+			SetCursorPosY(GetCursorPosY() + H::Draw.Scale(4));
+			FInputText("Search cheaters...", cheater_search, GetWindowWidth() - GetStyle().WindowPadding.x * 2);
+
 			auto vCheaters = F::PlayerUtils.GetCheaterVector();
+			auto to_lower = [](std::string text) -> std::string
+				{
+					std::transform(text.begin(), text.end(), text.begin(), [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+					return text;
+				};
+			const std::string lowered_search = to_lower(cheater_search);
+			if (!lowered_search.empty())
+			{
+				vCheaters.erase(std::remove_if(vCheaters.begin(), vCheaters.end(), [&](const std::pair<uint32_t, CheaterRecord_t>& entry)
+					{
+						const CheaterRecord_t& record = entry.second;
+						const std::string search_text = std::format("{} {} {}", record.m_sName, record.m_sReason, entry.first);
+						return to_lower(search_text).find(lowered_search) == std::string::npos;
+					}), vCheaters.end());
+			}
+
 			if (vCheaters.empty())
 			{
-				SetCursorPos({ H::Draw.Scale(15), H::Draw.Scale(40) });
-				FText("Nothings here...");
+				SetCursorPos({ H::Draw.Scale(15), H::Draw.Scale(60) });
+				FText(cheater_search.empty() ? "Nothings here..." : "No matching cheaters.");
 				DebugDummy({ 0, H::Draw.Scale(8) });
 			}
 			else
 			{
-				auto toLower = [](std::string sText) -> std::string
-					{
-						std::transform(sText.begin(), sText.end(), sText.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-						return sText;
-					};
-
 				auto getReasonColor = [&](const CheaterRecord_t& tRecord) -> Color_t
 					{
 						if (!tRecord.m_bAuto)
 							return { 185, 185, 185, 255 };
 
-						const std::string sReason = toLower(tRecord.m_sReason);
+						const std::string sReason = to_lower(tRecord.m_sReason);
 						auto contains = [&](std::string_view sNeedle) -> bool { return sReason.find(sNeedle) != std::string::npos; };
 
 						if (contains("crit"))
@@ -2359,7 +2383,7 @@ void CMenu::MenuAnticheat(int iTab)
 						const auto& tRecord = tEntry.second;
 						F::SteamProfileCache.TouchAvatar(tEntry.first);
 						const std::string sName = tRecord.m_sName.empty() ? std::format("{}", tEntry.first) : tRecord.m_sName;
-						std::string sReason = tRecord.m_sReason.empty() ? (tRecord.m_bAuto ? "detected by Amalgam" : "tagged by the player") : tRecord.m_sReason;
+						std::string sReason = tRecord.m_sReason.empty() ? (tRecord.m_bAuto ? "detected by unibox" : "tagged by the player") : tRecord.m_sReason;
 						if (!tRecord.m_bAuto)
 							sReason = "tagged by the player";
 						std::string sDetections = tRecord.m_bAuto ? std::format("Detections: {}", std::max(0, tRecord.m_iDetections)) : "Manual tag";
@@ -2374,7 +2398,7 @@ void CMenu::MenuAnticheat(int iTab)
 						const float flPadding = H::Draw.Scale(8);
 						const float flTextOffset = flPadding * 2 + flAvatarSize;
 
-						ImVec2 vOriginalPos = { !x ? GetStyle().WindowPadding.x : GetWindowWidth() / 2 + GetStyle().WindowPadding.x / 2, H::Draw.Scale(35 + 64 * y) };
+						ImVec2 vOriginalPos = { !x ? GetStyle().WindowPadding.x : GetWindowWidth() / 2 + GetStyle().WindowPadding.x / 2, H::Draw.Scale(64 + 64 * y) };
 						float flWidth = GetWindowWidth() / 2 - GetStyle().WindowPadding.x * 1.5f;
 						float flHeight = H::Draw.Scale(56);
 						ImVec2 vDrawPos = GetDrawPos() + vOriginalPos;
@@ -2547,7 +2571,7 @@ void CMenu::MenuAnticheat(int iTab)
 					drawCheater(vCheaters[i], x, y);
 					if (!x) iBlu++; else iRed++;
 				}
-				SetCursorPos({ 0, H::Draw.Scale(36 + 64 * std::max(iBlu, iRed)) });
+				SetCursorPos({ 0, H::Draw.Scale(65 + 64 * std::max(iBlu, iRed)) });
 				DebugDummy({ 0, H::Draw.Scale(8) });
 			}
 		}
@@ -2562,15 +2586,15 @@ void CMenu::MenuAnticheat(int iTab)
 				if (FButton("Export", FButtonEnum::Fit | FButtonEnum::SameLine))
 				{
 					SDK::SetClipboard(F::PlayerUtils.ExportCheatersToJson());
-					SDK::Output("Amalgam", "Copied cheaterlist to clipboard", { 255, 150, 150 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_TOAST | OUTPUT_MENU);
+					SDK::Output("unibox", "Copied cheaterlist to clipboard", { 255, 150, 150 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_TOAST | OUTPUT_MENU);
 				}
 
 				if (FButton("Import", FButtonEnum::Fit | FButtonEnum::SameLine))
 				{
 					if (F::PlayerUtils.ImportCheatersFromJson(SDK::GetClipboard(), true))
-						SDK::Output("Amalgam", "Imported cheaterlist", { 255, 150, 150 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_TOAST | OUTPUT_MENU);
+						SDK::Output("unibox", "Imported cheaterlist", { 255, 150, 150 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_TOAST | OUTPUT_MENU);
 					else
-						SDK::Output("Amalgam", "Failed to import cheaterlist", { 255, 150, 150, 127 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_TOAST | OUTPUT_MENU);
+						SDK::Output("unibox", "Failed to import cheaterlist", { 255, 150, 150, 127 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_TOAST | OUTPUT_MENU);
 				}
 			}
 			PopDisabled();
@@ -3373,11 +3397,30 @@ void CMenu::MenuLogs(int iTab)
 		} EndSection();
 		if (Section("Marked Players"))
 		{
+			static std::string marked_player_search = "";
+			SetCursorPosY(GetCursorPosY() + H::Draw.Scale(4));
+			FInputText("Search marked players...", marked_player_search, GetWindowWidth() - GetStyle().WindowPadding.x * 2);
+
 			auto vMarkedPlayers = F::PlayerUtils.GetMarkedPlayers();
+			auto to_lower = [](std::string text) -> std::string
+				{
+					std::transform(text.begin(), text.end(), text.begin(), [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+					return text;
+				};
+			const std::string lowered_search = to_lower(marked_player_search);
+			if (!lowered_search.empty())
+			{
+				vMarkedPlayers.erase(std::remove_if(vMarkedPlayers.begin(), vMarkedPlayers.end(), [&](const MarkedPlayer_t& entry)
+					{
+						const std::string search_text = std::format("{} {} {} {}", entry.m_sDisplayName, entry.m_sAlias, entry.m_sRoleName, entry.m_uAccountID);
+						return to_lower(search_text).find(lowered_search) == std::string::npos;
+					}), vMarkedPlayers.end());
+			}
+
 			if (vMarkedPlayers.empty())
 			{
-				SetCursorPos({ H::Draw.Scale(15), H::Draw.Scale(40) });
-				FText("Nothings here...");
+				SetCursorPos({ H::Draw.Scale(15), H::Draw.Scale(60) });
+				FText(marked_player_search.empty() ? "Nothings here..." : "No matching marked players.");
 				DebugDummy({ 0, H::Draw.Scale(8) });
 			}
 			else
@@ -3398,7 +3441,7 @@ void CMenu::MenuLogs(int iTab)
 					const float flPadding = H::Draw.Scale(8);
 					const float flTextOffset = flPadding * 2 + flAvatarSize;
 
-					ImVec2 vOriginalPos = { !x ? GetStyle().WindowPadding.x : GetWindowWidth() / 2 + GetStyle().WindowPadding.x / 2, H::Draw.Scale(35 + 64 * y) };
+					ImVec2 vOriginalPos = { !x ? GetStyle().WindowPadding.x : GetWindowWidth() / 2 + GetStyle().WindowPadding.x / 2, H::Draw.Scale(64 + 64 * y) };
 					float flWidth = GetWindowWidth() / 2 - GetStyle().WindowPadding.x * 1.5f;
 					float flHeight = H::Draw.Scale(56);
 					ImVec2 vDrawPos = GetDrawPos() + vOriginalPos;
@@ -3577,7 +3620,7 @@ void CMenu::MenuLogs(int iTab)
 					else
 						iRed++;
 				}
-				SetCursorPos({ 0, H::Draw.Scale(36 + 64 * std::max(iBlu, iRed)) });
+				SetCursorPos({ 0, H::Draw.Scale(65 + 64 * std::max(iBlu, iRed)) });
 				DebugDummy({ 0, H::Draw.Scale(8) });
 			}
 		} EndSection();
@@ -3608,7 +3651,7 @@ void CMenu::MenuLogs(int iTab)
 						fStream.close();
 
 						SDK::SetClipboard(sString);
-						SDK::Output("Amalgam", "Copied playerlist to clipboard", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+						SDK::Output("unibox", "Copied playerlist to clipboard", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 					}
 				}
 
@@ -3713,7 +3756,7 @@ void CMenu::MenuLogs(int iTab)
 						}
 						catch (...)
 						{
-							SDK::Output("Amalgam", "Failed to import playerlist", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+							SDK::Output("unibox", "Failed to import playerlist", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 						}
 					}
 
@@ -3774,7 +3817,7 @@ void CMenu::MenuLogs(int iTab)
 							}
 
 							F::PlayerUtils.m_bSave = true;
-							SDK::Output("Amalgam", "Imported playerlist", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+							SDK::Output("unibox", "Imported playerlist", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 
 							CloseCurrentPopup();
 						}
@@ -3805,11 +3848,11 @@ void CMenu::MenuLogs(int iTab)
 							F::Configs.m_sCorePath + std::format("Backup{}.json", iBackupCount + 1),
 							std::filesystem::copy_options::overwrite_existing
 						);
-						SDK::Output("Amalgam", "Saved backup playerlist", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+						SDK::Output("unibox", "Saved backup playerlist", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
 					}
 					catch (...)
 					{
-						SDK::Output("Amalgam", "Failed to backup playerlist", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+						SDK::Output("unibox", "Failed to backup playerlist", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
 					}
 				}
 			}

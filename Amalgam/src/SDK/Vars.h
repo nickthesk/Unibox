@@ -175,8 +175,8 @@ NAMESPACE_BEGIN(Vars)
 	NAMESPACE_END(Config)
 	
 	NAMESPACE_BEGIN(Menu)
-		CVar(CheatTitle, "Cheat title", std::string("Amalgam"), VISUAL | DROPDOWN_AUTOUPDATE);
-		CVar(CheatTag, "Cheat tag", std::string("[Amalgam]"), VISUAL);
+		CVar(CheatTitle, "Cheat title", std::string("unibox"), VISUAL | DROPDOWN_AUTOUPDATE);
+		CVar(CheatTag, "Cheat tag", std::string("[unibox]"), VISUAL);
 		CVar(PrimaryKey, "Primary key", VK_INSERT, NOBIND);
 		CVar(SecondaryKey, "Secondary key", VK_F3, NOBIND);
 
@@ -297,7 +297,7 @@ NAMESPACE_BEGIN(Vars)
 			CVarEnum(BypassIgnore, "Bypass ignore", 0, DROPDOWN_MULTI, nullptr,
 				VA_LIST("Friends", "Ignored", "Local bots"),
 				Friends = 1 << 0, Ignored = 1 << 1, LocalBots = 1 << 2);
-			CVar(AimFOV, "Aim FOV", 180.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 180.f);
+			CVar(AimFOV, "Aim FOV", 180.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 360.f);
 			CVar(MaxTargets, "Max targets", 2, SLIDER_MIN, 1, 6);
 			CVar(IgnoreInvisible, "Ignore invisible", 50.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 10.f, "%g%%");
 			CVar(AssistStrength, "Assist strength", 25.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 1.f, "%g%%");
@@ -861,6 +861,7 @@ I dont think this is a good idea to disable simulations completely:
 				CVar(BlacklistSlightDangerLimit, "Blacklist slight danger limit", 2, SLIDER_MIN, 1, 10);
 
 				CVar(SmartJump, "Smart jump", true);
+				CVar(EscapeSpawn, "Escape spawn", true);
 
 				CVarEnum(RechargeDT, "Recharge DT", 0, NONE, nullptr,
 					VA_LIST("Off", "On", "If not fakelagging"),
