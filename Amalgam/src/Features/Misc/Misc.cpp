@@ -1,6 +1,8 @@
 #include "Misc.h"
 #include "../Configs/Configs.h"
 
+#include <array>
+
 #include "../Backtrack/Backtrack.h"
 #include "../Ticks/Ticks.h"
 #include "../Players/PlayerUtils.h"
@@ -23,7 +25,6 @@ void CMisc::RunPre(CTFPlayer* pLocal, CUserCmd* pCmd)
 	VoiceCommandSpam(pLocal);
 	ChatSpam(pLocal);
 	AutoDisguise(pLocal);
-	JoinSpam(pLocal);
 	AchievementSpam(pLocal);
 	CallVoteSpam(pLocal);
 	CheatsBypass();
@@ -56,6 +57,9 @@ void CMisc::RunPre(CTFPlayer* pLocal, CUserCmd* pCmd)
 
 void CMisc::RunPost(CTFPlayer* pLocal, CUserCmd* pCmd)
 {
+	m_bDuckSpeedActive = false;
+	AutoCrouchNavbot(pLocal, pCmd);
+
 	if (!pLocal->IsAlive() || pLocal->IsAGhost() || pLocal->m_MoveType() != MOVETYPE_WALK || pLocal->IsSwimming()
 		|| pLocal->InCond(TF_COND_SHIELD_CHARGE))
 		return;
@@ -76,6 +80,22 @@ void CMisc::RunPost(CTFPlayer* pLocal, CUserCmd* pCmd)
 			MovementLock(pLocal, pCmd);
 		}
 	}
+}
+
+void CMisc::AutoCrouchNavbot(CTFPlayer* pLocal, CUserCmd* pCmd)
+{
+	if (!Vars::Misc::Movement::DuckSpeed.Value
+		|| !Vars::Misc::Movement::NavBot::Enabled.Value
+		|| !Vars::Misc::Movement::NavEngine::Enabled.Value)
+		return;
+
+	if (pLocal->IsSwimming() || F::NavEngine.IsUnstucking() || pCmd->buttons & IN_JUMP)
+	{
+		pCmd->buttons &= ~IN_DUCK;
+		return;
+	}
+
+	pCmd->buttons |= IN_DUCK;
 }
 
 
@@ -706,26 +726,48 @@ void CMisc::AutoDisguise(CTFPlayer* pLocal)
 	if (!tDisguiseTimer.Run(0.75f))
 		return;
 
-	const int iClass = SDK::RandomInt(1, 9);
-	I::EngineClient->ClientCmd_Unrestricted(std::format("disguise {} -1", iClass).c_str());
-}
-
-void CMisc::JoinSpam(CTFPlayer* pLocal)
-{
-	if (!Vars::Misc::Automation::JoinSpam.Value)
+	auto pResource = H::Entities.GetResource();
+	if (!pResource)
 		return;
 
-	static Timer tJoinSpamTimer{};
-	if (!tJoinSpamTimer.Run(1.5f))
-		return;
+	const int iEnemyTeam = pLocal->m_iTeamNum() == TF_TEAM_RED ? TF_TEAM_BLUE : TF_TEAM_RED;
+	std::array<int, TF_CLASS_COUNT> aClassCounts = {};
+	int iTotalClasses = 0;
 
-	if (!pLocal->IsInValidTeam())
+	for (int i = 1; i <= I::EngineClient->GetMaxClients(); ++i)
 	{
-		I::EngineClient->ClientCmd_Unrestricted("autoteam");
-		return;
+		if (!pResource->m_bValid(i) || !pResource->m_bConnected(i) || pResource->m_iTeam(i) != iEnemyTeam)
+			continue;
+
+		const int iEnemyClass = pResource->m_iPlayerClass(i);
+		if (iEnemyClass <= TF_CLASS_UNDEFINED || iEnemyClass >= TF_CLASS_COUNT || iEnemyClass == TF_CLASS_HEAVY)
+			continue;
+
+		++aClassCounts[iEnemyClass];
+		++iTotalClasses;
 	}
 
-	I::EngineClient->ClientCmd_Unrestricted(pLocal->m_iTeamNum() == TF_TEAM_RED ? "jointeam blue" : "jointeam red");
+	if (!iTotalClasses)
+		return;
+
+	int iClass = TF_CLASS_UNDEFINED;
+	int iRandomClass = SDK::RandomInt(1, iTotalClasses);
+	for (int i = TF_CLASS_SCOUT; i < TF_CLASS_COUNT; ++i)
+	{
+		if (iRandomClass > aClassCounts[i])
+		{
+			iRandomClass -= aClassCounts[i];
+			continue;
+		}
+
+		iClass = i;
+		break;
+	}
+
+	if (iClass == TF_CLASS_UNDEFINED)
+		return;
+
+	I::EngineClient->ClientCmd_Unrestricted(std::format("disguise {} -1", iClass).c_str());
 }
 
 void CMisc::CallVoteSpam(CTFPlayer* pLocal)
@@ -874,20 +916,21 @@ void CMisc::FastMovement(CTFPlayer* pLocal, CUserCmd* pCmd)
 	}
 	case 1:
 	{
-		if ((pLocal->IsDucking() ? !Vars::Misc::Movement::DuckSpeed.Value : !Vars::Misc::Movement::FastAccelerate.Value)
+		const bool bDucking = pLocal->IsDucking() || (pCmd->buttons & IN_DUCK);
+		if ((bDucking ? !Vars::Misc::Movement::DuckSpeed.Value : !Vars::Misc::Movement::FastAccelerate.Value)
 			|| F::AntiCheatCompatibility.Active()
-			|| G::Attacking == 1 || F::Ticks.m_bDoubletap || F::Ticks.m_bSpeedhack || F::Ticks.m_bRecharge || G::AntiAim)
+			|| G::Attacking == 1 || F::Ticks.m_bDoubletap || F::Ticks.m_bRecharge)
 			return;
 
 		if (!(pCmd->buttons & (IN_FORWARD | IN_BACK | IN_MOVELEFT | IN_MOVERIGHT))
-			&& !(Vars::Misc::Movement::DuckSpeedNavbotCompat.Value && (pCmd->forwardmove || pCmd->sidemove)))
+			&& (!bDucking || (!pCmd->forwardmove && !pCmd->sidemove)))
 			return;
 
 		bool bChoke = !I::ClientState->chokedcommands && F::Ticks.CanChoke(true);
 		if (!bChoke)
 			return;
 
-		if (Vars::Misc::Movement::DuckSpeedForward.Value)
+		if (bDucking)
 		{
 			pCmd->forwardmove *= -1.f;
 			pCmd->sidemove *= -1.f;
@@ -901,6 +944,7 @@ void CMisc::FastMovement(CTFPlayer* pLocal, CUserCmd* pCmd)
 		pCmd->viewangles.y = fmodf(pCmd->viewangles.y - vAngMoveReverse.y, 360.f);
 		pCmd->viewangles.z = 270.f;
 		G::PSilentAngles = true;
+		m_bDuckSpeedActive = bDucking;
 
 		break;
 	}

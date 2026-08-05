@@ -5,9 +5,7 @@
 #include "../../CritHack/CritHack.h"
 #include "../../Backtrack/Backtrack.h"
 
-namespace
-{
-	const char* GetPasstimeThrowSpeedCvar(CTFPlayer* pPlayer)
+static const char* GetPasstimeThrowSpeedCvar(CTFPlayer* pPlayer)
 	{
 		switch (pPlayer ? pPlayer->m_iClass() : TF_CLASS_UNDEFINED)
 		{
@@ -24,7 +22,7 @@ namespace
 		}
 	}
 
-	const char* GetPasstimeThrowArcCvar(CTFPlayer* pPlayer)
+static const char* GetPasstimeThrowArcCvar(CTFPlayer* pPlayer)
 	{
 		switch (pPlayer ? pPlayer->m_iClass() : TF_CLASS_UNDEFINED)
 		{
@@ -40,7 +38,6 @@ namespace
 		default: return "tf_passtime_throwarc_scout";
 		}
 	}
-}
 
 bool CProjectileSimulation::GetInfoMain(CTFPlayer* pPlayer, CTFWeaponBase* pWeapon, Vec3 vAngles, ProjectileInfo& tProjInfo, int iFlags, float flAutoCharge)
 {
@@ -151,6 +148,18 @@ bool CProjectileSimulation::GetInfoMain(CTFPlayer* pPlayer, CTFWeaponBase* pWeap
 			else break;
 
 			tProjInfo = { pPlayer, pWeapon, uType, vPos, vAngle, { 0.f, 0.f, 0.f }, flSpeed, 0.f };
+			return true;
+		}
+		break;
+	}
+	case TF_WEAPON_MECHANICAL_ARM:
+	{
+		auto pOwner = pWeapon->m_hOwner().Get()->As<CTFPlayer>();
+		if (pOwner && pOwner->IsPlayer() && pOwner->m_iMetalCount() >= 65)
+		{
+			auto uType = FNV1A::Hash32Const("models/weapons/w_models/w_drg_ball.mdl");
+			SDK::GetProjectileFireSetup(pPlayer, vAngles, { 40.f, 15.f, -10.f }, vPos, vAngle, 0.f, 0.f, bInterp);
+			tProjInfo = { pPlayer, pWeapon, uType, vPos, vAngle, Vec3(), 700.f, 0.f, 1.2f };
 			return true;
 		}
 		break;

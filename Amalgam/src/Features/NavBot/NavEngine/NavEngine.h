@@ -69,12 +69,14 @@ private:
 	CNavArea* m_pLastProgressArea = nullptr;
 
 	Timer m_tOffMeshTimer = {};
+	Timer m_tCrumbGraphCheckTimer = {};
 	Vector m_vOffMeshTarget = {};
 
 	bool m_bRepathRequested = false;
 	int m_iNextRepathTick = 0;
 	bool m_bRepathOnFail = false;
 	bool m_bCurrentNavToLocal = false;
+	bool m_bUnstucking = false;
 	int m_iLastBlacklistAbandonTick = 0;
 
 	bool m_bUpdatedRespawnRooms = false;
@@ -90,16 +92,14 @@ private:
 	size_t m_iRecentFallSpeedIndex = 0;
 	size_t m_nRecentFallSpeedCount = 0;
 
-	void EmitConnectionCrumbs(CNavArea* pFrom, CNavArea* pTo);
-	void EmitIntraAreaCrumbs(const Vector& vStart, const Vector& vDestination, CNavArea* pArea);
 	void AbandonPath(const std::string& sReason);
 	void RecordStuckFailure();
 	void ResetStuckProgress(const Vector& vLocalOrigin, const Vector& vCrumbTarget);
 	void PollPathWorker();
+	bool RefreshCrumbGraph();
 	bool BuildCrumbsFromResult(const PathWorker::PathResult& tResult, CTFPlayer* pLocal);
 	void UpdateRespawnRooms();
 	void ClearPathState();
-	void ClearDebugPaths();
 	void RecoverOffMesh(CTFPlayer* pLocal, CNavArea* pArea, const Vector& vLocalOrigin);
 	void SampleFallSpeed(float flVerticalVelocity);
 	bool RecentlyAtRest() const;
@@ -109,9 +109,6 @@ private:
 public:
 	std::string m_sLastFailureReason = "";
 	bool m_bIgnoreTraces = false;
-	std::vector<std::pair<Vector, Vector>> m_vPossiblePaths = {};
-	std::vector<std::pair<Vector, Vector>> m_vDebugWalkablePaths = {};
-	std::vector<std::pair<Vector, Vector>> m_vRejectedPaths = {};
 
 	PriorityListEnum::PriorityListEnum m_eCurrentPriority = PriorityListEnum::None;
 	Crumb_t m_tCurrentCrumb = {};
@@ -129,6 +126,7 @@ public:
 	bool IsPlayerPassableNavigation(CTFPlayer* pLocal, const Vector vFrom, Vector vTo, unsigned int nMask = MASK_PLAYERSOLID);
 
 	bool IsPathing() { return !m_vCrumbs.empty() || m_uPendingRequestId != 0; }
+	bool IsUnstucking() const { return m_bUnstucking; }
 	bool IsNavMeshLoaded() const { return m_pMap && m_pMap->m_eState == NavStateEnum::Active; }
 	std::string GetNavFilePath() const { return m_pMap ? m_pMap->m_sMapName : ""; }
 	bool HasRespawnRooms() const { return !m_vRespawnRooms.empty(); }

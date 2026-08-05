@@ -16,8 +16,50 @@ IMaterial* CMaterials::Create(char const* szName, KeyValues* pKV)
 	if (!pMaterial)
 		return nullptr;
 
-	m_mMatList[pMaterial];
 	return pMaterial;
+}
+
+void CMaterials::RequestLoad()
+{
+	PendingOperation expected = PendingOperation::None;
+	m_ePendingOperation.compare_exchange_strong(expected, PendingOperation::Load);
+}
+
+void CMaterials::RequestUnload()
+{
+	m_bUnloadComplete = false;
+	m_ePendingOperation = PendingOperation::Unload;
+}
+
+bool CMaterials::IsUnloadComplete() const
+{
+	return m_bUnloadComplete.load();
+}
+
+void CMaterials::ServicePendingOperation()
+{
+	const PendingOperation operation = m_ePendingOperation.exchange(PendingOperation::None);
+	if (operation == PendingOperation::None)
+		return;
+
+	switch (operation)
+	{
+	case PendingOperation::Load:
+		if (!m_bLoaded)
+			LoadMaterials();
+		break;
+	case PendingOperation::Reload:
+		UnloadMaterials();
+		LoadMaterials();
+		break;
+	case PendingOperation::Unload:
+		UnloadMaterials();
+		I::MaterialSystem->Flush(true);
+		m_bUnloadComplete = true;
+		break;
+	case PendingOperation::None:
+		break;
+	}
 }
 
 IMaterial* CMaterials::create_from_vmt(const char* name, const std::string& vmt)
@@ -39,9 +81,6 @@ void CMaterials::Remove(IMaterial* pMaterial)
 {
 	if (!pMaterial)
 		return;
-
-	if (m_mMatList.contains(pMaterial))
-		m_mMatList.erase(pMaterial);
 
 	pMaterial->DecrementReferenceCount();
 	pMaterial->DeleteIfUnreferenced();
@@ -290,14 +329,15 @@ void CMaterials::UnloadMaterials()
 	for (auto& tMaterial : m_mMaterials | std::views::values)
 		Remove(tMaterial.m_pMaterial);
 	m_mMaterials.clear();
-	m_mMatList.clear();
 }
 
 void CMaterials::ReloadMaterials()
 {
-	UnloadMaterials();
-
-	LoadMaterials();
+	PendingOperation pending = m_ePendingOperation.load();
+	while (pending != PendingOperation::Unload
+		&& !m_ePendingOperation.compare_exchange_weak(pending, PendingOperation::Reload))
+	{
+	}
 }
 
 

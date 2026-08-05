@@ -330,7 +330,7 @@ void CCritHack::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 	if (pWeapon->GetWeaponID() == TF_WEAPON_MINIGUN && pCmd->buttons & IN_ATTACK)
 		pCmd->buttons &= ~IN_ATTACK2;
 
-	bool bAttacking = G::Attacking /*== 1*/ || F::Ticks.m_bDoubletap || F::Ticks.m_bSpeedhack;
+	bool bAttacking = G::Attacking /*== 1*/ || F::Ticks.m_bDoubletap;
 	if (m_bMelee)
 	{
 		bAttacking = G::CanPrimaryAttack && pCmd->buttons & IN_ATTACK;
@@ -755,5 +755,5 @@ void CCritHack::Draw(CTFPlayer* pLocal)
 	};
 	const float flPanelWidth = H::Draw.Scale(180.f);
 	const float flPanelHeight = H::Draw.Scale(29.f);
-	DrawIndicatorPanel(ImGui::GetForegroundDrawList(), vPanelPos, flPanelWidth, flPanelHeight, tCache.m_sLeftText.c_str(), tCache.m_sRightText.c_str(), tCache.m_tLeftColor, tCache.m_tRightColor, tCache.m_tBarColor, tCache.m_flProgress, tCache.m_bDrawFooter, "Not Ready");
+	DrawIndicatorPanel(ImGui::GetBackgroundDrawList(), vPanelPos, flPanelWidth, flPanelHeight, tCache.m_sLeftText.c_str(), tCache.m_sRightText.c_str(), tCache.m_tLeftColor, tCache.m_tRightColor, tCache.m_tBarColor, tCache.m_flProgress, tCache.m_bDrawFooter, "Not Ready");
 }

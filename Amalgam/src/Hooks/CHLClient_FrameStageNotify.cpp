@@ -14,6 +14,7 @@
 #include "../Features/Visuals/Chams/Chams.h"
 #include "../Features/Visuals/Glow/Glow.h"
 #include "../Features/Visuals/Groups/Groups.h"
+#include "../Features/Visuals/Materials/Materials.h"
 #include "../Features/Visuals/OffscreenArrows/OffscreenArrows.h"
 #ifdef TEXTMODE
 #include "../Features/Misc/AutoQueue/AutoQueue.h"
@@ -26,6 +27,12 @@ MAKE_HOOK(CHLClient_FrameStageNotify, U::Memory.GetVirtual(I::Client, 35), void,
 	DEBUG_RETURN(CHLClient_FrameStageNotify, rcx, curStage);
 
 	CALL_ORIGINAL(rcx, curStage);
+
+
+#ifndef TEXTMODE
+	if (curStage == FRAME_RENDER_START)
+		F::Materials.ServicePendingOperation();
+#endif
 
 	if (G::Unload) 
 		return;

@@ -23,12 +23,6 @@ public:
 	{
 		return reinterpret_cast<T>(m_pOriginal);
 	}
-
-	template <typename T, typename... Args>
-	inline T Call(Args... args) const
-	{
-		return reinterpret_cast<T(__fastcall*)(Args...)>(m_pOriginal)(args...);
-	}
 };
 
 #ifndef DEBUG_HOOKS

@@ -16,25 +16,19 @@
 #include "../../Output/Output.h"
 #include "../../World/World.h"
 #include "../../Simulation/ProjectileSimulation/ProjectileSimulation.h"
+#include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
 
 #include <wrl/client.h>
 
 struct CachedAvatar_t
 {
 	Microsoft::WRL::ComPtr<IDirect3DTexture9> pTexture;
-	double flNextAttempt = 0.0;
+	uint64_t uRevision = 0;
 	bool bLoggedCreateFailure = false;
 	bool bLoggedCreateSuccess = false;
 };
 
-static std::unordered_map<uint32_t, CachedAvatar_t> g_mAvatarTextures;
-
-static void ResetAvatarTexture(uint32_t uAccountID)
-{
-	if (!uAccountID)
-		return;
-	g_mAvatarTextures.erase(uAccountID);
-}
+static std::unordered_map<uint32_t, CachedAvatar_t> s_mAvatarTextures;
 
 static ImTextureID GetAvatarTexture(uint32_t uAccountID)
 {
@@ -45,9 +39,7 @@ static ImTextureID GetAvatarTexture(uint32_t uAccountID)
 	if (!pDevice)
 		return static_cast<ImTextureID>(0);
 
-	auto& tCache = g_mAvatarTextures[uAccountID];
-	if (tCache.pTexture)
-		return reinterpret_cast<ImTextureID>(tCache.pTexture.Get());
+	auto& tCache = s_mAvatarTextures[uAccountID];
 
 	const uint64_t uSteamID64 = CSteamID(uAccountID, k_EUniversePublic, k_EAccountTypeIndividual).ConvertToUint64();
 	constexpr Color_t tLogColor = { 175, 150, 255, 255 };
@@ -68,7 +60,7 @@ static ImTextureID GetAvatarTexture(uint32_t uAccountID)
 															 uSteamID64,
 															 pool == D3DPOOL_MANAGED ? "MANAGED" : "DEFAULT",
 															 static_cast<uint32_t>(hr));
-					SDK::Output("steamwebapi", sMessage.c_str(), tErrorColor, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
+					SDK::Output("SteamProfileCache", sMessage.c_str(), tErrorColor, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
 				};
 
 			auto TryCreate = [&](D3DPOOL pool, DWORD usage) -> Microsoft::WRL::ComPtr<IDirect3DTexture9>
@@ -118,11 +110,10 @@ static ImTextureID GetAvatarTexture(uint32_t uAccountID)
 			if (auto pTexture = CreateTexture(pData, uWidth, uHeight))
 			{
 				tCache.pTexture = pTexture;
-				tCache.flNextAttempt = 0.0;
 				if (!tCache.bLoggedCreateSuccess)
 				{
 					const std::string sMessage = std::format("ImGui now displaying avatar for {} ({}x{}).", uSteamID64, uWidth, uHeight);
-					SDK::Output("steamwebapi", sMessage.c_str(), tLogColor, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
+					SDK::Output("SteamProfileCache", sMessage.c_str(), tLogColor, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
 					tCache.bLoggedCreateSuccess = true;
 				}
 				return reinterpret_cast<ImTextureID>(tCache.pTexture.Get());
@@ -131,47 +122,19 @@ static ImTextureID GetAvatarTexture(uint32_t uAccountID)
 			return static_cast<ImTextureID>(0);
 		};
 
-	// Always consume any finished remote download immediately, even if we're in the retry cooldown.
 	CSteamProfileCache::AvatarImage_t tImage;
 	if (F::SteamProfileCache.TryGetAvatarImage(uAccountID, tImage) && tImage.HasData())
 	{
-		if (ImTextureID pRemoteTex = StoreTexture(tImage.m_pPixels->data(), tImage.m_uWidth, tImage.m_uHeight))
-			return pRemoteTex;
-	}
-
-	const double flNow = SDK::PlatFloatTime();
-	if (flNow < tCache.flNextAttempt)
-		return static_cast<ImTextureID>(0);
-
-	if (I::SteamFriends && I::SteamUtils)
-	{
-		const CSteamID steamID(uAccountID, k_EUniversePublic, k_EAccountTypeIndividual);
-		const int nAvatar = I::SteamFriends->GetMediumFriendAvatar(steamID);
-		uint32_t uWidth = 0, uHeight = 0;
-		if (nAvatar && I::SteamUtils->GetImageSize(nAvatar, &uWidth, &uHeight) && uWidth && uHeight)
+		if (!tCache.pTexture || tCache.uRevision != tImage.m_uRevision)
 		{
-			std::vector<uint8_t> vRgba(static_cast<size_t>(uWidth) * static_cast<size_t>(uHeight) * 4);
-			if (I::SteamUtils->GetImageRGBA(nAvatar, vRgba.data(), static_cast<int>(vRgba.size())))
+			if (ImTextureID pTexture = StoreTexture(tImage.m_pPixels->data(), tImage.m_uWidth, tImage.m_uHeight))
 			{
-				std::vector<uint8_t> vBgra(vRgba.size());
-				for (uint32_t y = 0; y < uHeight; y++)
-				{
-					for (uint32_t x = 0; x < uWidth; x++)
-					{
-						const size_t uIndex = (static_cast<size_t>(y) * uWidth + x) * 4;
-						vBgra[uIndex + 0] = vRgba[uIndex + 2];
-						vBgra[uIndex + 1] = vRgba[uIndex + 1];
-						vBgra[uIndex + 2] = vRgba[uIndex + 0];
-						vBgra[uIndex + 3] = vRgba[uIndex + 3];
-					}
-				}
-				if (ImTextureID pFriendTex = StoreTexture(vBgra.data(), uWidth, uHeight))
-					return pFriendTex;
+				tCache.uRevision = tImage.m_uRevision;
+				return pTexture;
 			}
 		}
+		return reinterpret_cast<ImTextureID>(tCache.pTexture.Get());
 	}
-
-	tCache.flNextAttempt = flNow + 5.0;
 	return static_cast<ImTextureID>(0);
 }
 
@@ -280,20 +243,29 @@ void CMenu::DrawMenu()
 {
 	using namespace ImGui;
 
+	auto ClampMenuPosition = [](const ImVec2& vPosition, const ImVec2& vSize, const ImVec2& vDisplaySize)
+	{
+		return ImVec2(
+			std::clamp(vPosition.x, 0.f, std::max(0.f, vDisplaySize.x - vSize.x)),
+			std::clamp(vPosition.y, 0.f, std::max(0.f, vDisplaySize.y - vSize.y))
+		);
+	};
+
 	static bool bSetPosition = false;
 	static bool bDraggingMenu = false;
 	static ImVec2 vMenuTargetPos = {};
 	static ImVec2 vMenuDragOffset = {};
 	ImVec2 vDefaultMenuSize = { H::Draw.Scale(900), H::Draw.Scale(500) };
+	static ImVec2 vMenuSize = vDefaultMenuSize;
 	if (!bSetPosition)
 	{
-		vMenuTargetPos = (GetIO().DisplaySize - vDefaultMenuSize) / 2;
+		vMenuTargetPos = ClampMenuPosition((GetIO().DisplaySize - vDefaultMenuSize) / 2, vDefaultMenuSize, GetIO().DisplaySize);
 		SetNextWindowPos(vMenuTargetPos, ImGuiCond_Always);
 		bSetPosition = true;
 	}
 	if (bDraggingMenu)
 	{
-		vMenuTargetPos = GetMousePos() - vMenuDragOffset;
+		vMenuTargetPos = ClampMenuPosition(GetMousePos() - vMenuDragOffset, vMenuSize, GetIO().DisplaySize);
 		SetNextWindowPos(vMenuTargetPos, ImGuiCond_Always);
 	}
 	SetNextWindowSize(vDefaultMenuSize, ImGuiCond_FirstUseEver);
@@ -302,6 +274,7 @@ void CMenu::DrawMenu()
 	if (Begin("Main", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove))
 	{
 		ImVec2 vWindowSize = GetWindowSize();
+		vMenuSize = vWindowSize;
 		ImVec2 vDrawPos = GetDrawPos();
 		ImVec2 vMousePos = GetMousePos();
 		auto pDrawList = GetWindowDrawList();
@@ -398,14 +371,12 @@ void CMenu::DrawMenu()
 			SetCursorPos({ vWindowSize.x - H::Draw.Scale(31), H::Draw.Scale(11) });
 			IconImage(ICON_MD_SEARCH);
 		}
-		if (bSearch && IsMouseReleased(ImGuiMouseButton_Left) && IsMouseWithin(vDrawPos.x, vDrawPos.y + flHeaderHeight, vWindowSize.x, vWindowSize.y - flHeaderHeight))
+		if (bSearch && IsMouseReleased(ImGuiMouseButton_Left) && !IsAnyItemHovered() && IsMouseWithin(vDrawPos.x, vDrawPos.y + flHeaderHeight, vWindowSize.x, vWindowSize.y - flHeaderHeight))
 			sSearch = "";
 
 		if (!IsMouseDown(ImGuiMouseButton_Left))
 			bDraggingMenu = false;
-		if (bDraggingMenu)
-			vMenuTargetPos = vMousePos - vMenuDragOffset;
-		bool bCanDragMenu = IsMouseWithin(vDrawPos.x, vDrawPos.y, vWindowSize.x, flNavHeight) && !IsAnyItemHovered() && !IsAnyItemActive() && !IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+		bool bCanDragMenu = IsMouseWithin(vDrawPos.x, vDrawPos.y, vWindowSize.x, vWindowSize.y) && !IsAnyItemHovered() && !IsAnyItemActive() && !IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
 		if (bCanDragMenu && IsMouseClicked(ImGuiMouseButton_Left))
 		{
 			bDraggingMenu = true;
@@ -445,6 +416,7 @@ void CMenu::DrawMenu()
 void CMenu::MenuAimbot(int iTab)
 {
 	using namespace ImGui;
+	F::AntiCheatCompatibility.EnforceSettings();
 
 	switch (iTab)
 	{
@@ -462,8 +434,7 @@ void CMenu::MenuAimbot(int iTab)
 					FDropdown(Vars::Aimbot::General::TargetSelection, FDropdownEnum::Right);
 					FDropdown(Vars::Aimbot::General::Target, FDropdownEnum::Left);
 					FDropdown(Vars::Aimbot::General::Ignore, FDropdownEnum::Right);
-					FDropdown(Vars::Aimbot::General::SmoothCurve, FDropdownEnum::Left);
-					FDropdown(Vars::Aimbot::General::BypassIgnore, FDropdownEnum::Right);
+					FDropdown(Vars::Aimbot::General::SmoothCurve);
 					FSlider(Vars::Aimbot::General::AimFOV, FSliderEnum::Left);
 					FSlider(Vars::Aimbot::General::MaxTargets, FSliderEnum::Right);
 					FSlider(Vars::Aimbot::General::SmoothCurveAmount, FSliderEnum::Left);
@@ -485,22 +456,28 @@ void CMenu::MenuAimbot(int iTab)
 					PopTransparent();
 					FToggle(Vars::Aimbot::General::AutoShoot, FToggleEnum::Left);
 					FToggle(Vars::Aimbot::General::FOVCircle, FToggleEnum::Right);
-					FToggle(Vars::Aimbot::General::PrioritizeNavbot, FToggleEnum::Left);
-					FToggle(Vars::Aimbot::General::PrioritizeFollowbot, FToggleEnum::Right);
 
 					Divider();
 					FText("Crithack");
 					Divider();
+					PushDisabled(F::AntiCheatCompatibility.Active());
+					{
 					FToggle(Vars::CritHack::ForceCrits, FToggleEnum::Left);
 					FToggle(Vars::CritHack::AvoidRandomCrits, FToggleEnum::Right);
 					FToggle(Vars::CritHack::AlwaysMeleeCrit, FToggleEnum::Left);
 					FToggle(Vars::CritHack::CritEffects, FToggleEnum::Right);
+					}
+					PopDisabled();
 
 					Divider();
 					FText("Misc");
 					Divider();
 					FToggle(Vars::Aimbot::General::LeadAndRestrict, FToggleEnum::Left);
+					PushDisabled(F::AntiCheatCompatibility.Active());
+					{
 					FToggle(Vars::Aimbot::General::NoSpread);
+					}
+					PopDisabled();
 				} EndSection();
 				if (Vars::Debug::Options.Value)
 				{
@@ -521,10 +498,14 @@ void CMenu::MenuAimbot(int iTab)
 				}
 				if (Section("Backtrack", 8))
 				{
+					PushDisabled(F::AntiCheatCompatibility.Active());
+					{
 					FSlider(Vars::Backtrack::Latency, FSliderEnum::Left);
 					FSlider(Vars::Backtrack::Interp, FSliderEnum::Right);
 					FSlider(Vars::Backtrack::Window);
 					//FToggle(Vars::Backtrack::PreferOnShot, FToggleEnum::Right);
+					}
+					PopDisabled();
 				} EndSection();
 				if (Vars::Debug::Options.Value)
 				{
@@ -628,7 +609,8 @@ void CMenu::MenuAimbot(int iTab)
 						FSlider(Vars::Aimbot::Projectile::AutoRelease);
 					}
 					PopTransparent();
-					FToggle(Vars::Aimbot::Projectile::GrapplingHookAim);
+					FToggle(Vars::Aimbot::Projectile::GrapplingHookAim, FSliderEnum::Left);
+					FSlider(Vars::Aimbot::Projectile::AutoSCMetalAmount, FSliderEnum::Right);
 				} EndSection();
 				if (Vars::Debug::Options.Value)
 				{
@@ -1133,8 +1115,8 @@ void CMenu::MenuVisuals(int iTab)
 			{
 				if (Section("Line", 8))
 				{
-					FColorPicker(Vars::Colors::LineIgnoreZ, FColorPickerEnum::None, { 0, H::Draw.Scale(6) }, { H::Draw.Scale(12), H::Draw.Scale(6) });
-					FColorPicker(Vars::Colors::Line, FColorPickerEnum::None, {}, { H::Draw.Scale(12), H::Draw.Scale(6) });
+					FColorPicker(Vars::Colors::LineIgnoreZ, FColorPickerEnum::Left);
+					FColorPicker(Vars::Colors::Line, FColorPickerEnum::Right);
 					FToggle(Vars::Visuals::Line::TracersEnabled);
 					FSlider(Vars::Visuals::Line::DrawDuration);
 				} EndSection();
@@ -1578,6 +1560,7 @@ void CMenu::MenuVisuals(int iTab)
 void CMenu::MenuHvH(int iTab)
 {
 	using namespace ImGui;
+	F::AntiCheatCompatibility.EnforceSettings();
 
 	switch (iTab)
 	{
@@ -1591,6 +1574,8 @@ void CMenu::MenuHvH(int iTab)
 			{
 				if (Section("Doubletap", 8))
 				{
+					PushDisabled(F::AntiCheatCompatibility.Active());
+					{
 					FToggle(Vars::Doubletap::Doubletap, FToggleEnum::Left);
 					FToggle(Vars::Doubletap::Warp, FToggleEnum::Right);
 					FToggle(Vars::Doubletap::RechargeTicks, FToggleEnum::Left);
@@ -1599,9 +1584,13 @@ void CMenu::MenuHvH(int iTab)
 					FSlider(Vars::Doubletap::WarpRate, FSliderEnum::Right);
 					FSlider(Vars::Doubletap::RechargeLimit, FSliderEnum::Left);
 					FSlider(Vars::Doubletap::PassiveRecharge, FSliderEnum::Right);
+					}
+					PopDisabled();
 				} EndSection();
 				if (Section("Fakelag"))
 				{
+					PushDisabled(F::AntiCheatCompatibility.Active());
+					{
 					FDropdown(Vars::Fakelag::Fakelag, FSliderEnum::Left);
 					FDropdown(Vars::Fakelag::Options, FDropdownEnum::Right);
 					PushTransparent(Vars::Fakelag::Fakelag.Value != Vars::Fakelag::FakelagEnum::Plain);
@@ -1616,6 +1605,8 @@ void CMenu::MenuHvH(int iTab)
 					PopTransparent();
 					FToggle(Vars::Fakelag::UnchokeOnAttack, FToggleEnum::Left);
 					FToggle(Vars::Fakelag::RetainBlastJump, FToggleEnum::Right);
+					}
+					PopDisabled();
 				} EndSection();
 				if (Vars::Debug::Options.Value)
 				{
@@ -1632,6 +1623,8 @@ void CMenu::MenuHvH(int iTab)
 				}
 				if (Section("Antiaim", 8))
 				{
+					PushDisabled(F::AntiCheatCompatibility.Active());
+					{
 					FToggle(Vars::AntiAim::Enabled);
 					FDropdown(Vars::AntiAim::PitchReal, FDropdownEnum::Left);
 					FDropdown(Vars::AntiAim::PitchFake, FDropdownEnum::Right);
@@ -1665,6 +1658,8 @@ void CMenu::MenuHvH(int iTab)
 					FToggle(Vars::AntiAim::MinWalk, FToggleEnum::Left);
 					FToggle(Vars::AntiAim::AntiOverlap, FToggleEnum::Left);
 					FToggle(Vars::AntiAim::HidePitchOnShot, FToggleEnum::Right);
+					}
+					PopDisabled();
 					FToggle(Vars::AntiAim::TauntSpin);
 				} EndSection();
 			}
@@ -1703,14 +1698,6 @@ void CMenu::MenuHvH(int iTab)
 				if (Section("Auto Peek", 8))
 				{
 					FToggle(Vars::AutoPeek::Enabled);
-				} EndSection();
-				if (Section("Speedhack", 8))
-				{
-					PushTransparent(Vars::Speedhack::Scale.Value == 1);
-					{
-						FSlider(Vars::Speedhack::Scale);
-					}
-					PopTransparent();
 				} EndSection();
 			}
 			EndTable();
@@ -1755,10 +1742,12 @@ void CMenu::MenuMisc(int iTab)
 					FToggle(Vars::Misc::Movement::AutoFaNJump, FToggleEnum::Left);
 					FToggle(Vars::Misc::Movement::AutoRevJump, FToggleEnum::Right);
 					FToggle(Vars::Misc::Movement::FastStop, FToggleEnum::Left);
-					FToggle(Vars::Misc::Movement::FastAccelerate, FToggleEnum::Right);
-					FToggle(Vars::Misc::Movement::DuckSpeed, FToggleEnum::Left);
-					FToggle(Vars::Misc::Movement::DuckSpeedNavbotCompat, FToggleEnum::Right);
-					FToggle(Vars::Misc::Movement::DuckSpeedForward, FToggleEnum::Left);
+					PushDisabled(F::AntiCheatCompatibility.Active());
+					{
+						FToggle(Vars::Misc::Movement::FastAccelerate, FToggleEnum::Right);
+						FToggle(Vars::Misc::Movement::DuckSpeed, FToggleEnum::Left);
+					}
+					PopDisabled();
 					FToggle(Vars::Misc::Movement::MovementLock, FToggleEnum::Right);
 					FToggle(Vars::Misc::Movement::ShieldTurnRate, FToggleEnum::Left);
 					FToggle(Vars::Misc::Movement::NoPush, FToggleEnum::Right);
@@ -1820,13 +1809,13 @@ void CMenu::MenuMisc(int iTab)
 					FToggle(Vars::Misc::MannVsMachine::AutoMvmReadyUp, FToggleEnum::Right);
 					FToggle(Vars::Misc::MannVsMachine::AutoAbandonMannUp, FToggleEnum::Left);
 					FToggleSlider(Vars::Misc::MannVsMachine::BuyBot, Vars::Misc::MannVsMachine::MaxCash);
+					FTooltip("WARNING: Works only on Mann Up missions with enough starting cash (600$) before the 1st wave!\nRequirements:\n1. Be a Vaccinator Medic\n2. Ping must be below 80ms\n3. Walk to the upgrade station\nPerforms MVM upgrade station exploit for extra cash.");
 					FToggle(Vars::Misc::MannVsMachine::BuyBotAutoClass, FToggleEnum::Left);
 					PushTransparent(!Vars::Misc::MannVsMachine::BuyBotAutoClass.Value);
 					{
 						FDropdown(Vars::Misc::MannVsMachine::BuyBotClass, { "Scout", "Soldier", "Pyro", "Demoman", "Heavy", "Engineer", "Sniper", "Spy" }, { 1, 3, 7, 4, 6, 9, 2, 8 }, FDropdownEnum::Right);
 					}
 					PopTransparent();
-					FTooltip("WARNING: Works only on Mann Up missions with enough starting cash (600$) before the 1st wave!\nRequirements:\n1. Be a Vaccinator Medic\n2. Ping must be below 80ms\n3. Walk to the upgrade station\nPerforms MVM upgrade station exploit for extra cash.");
 				} EndSection();
 			}
 
@@ -1843,7 +1832,6 @@ void CMenu::MenuMisc(int iTab)
 					FToggle(Vars::Misc::Automation::KartControl, FToggleEnum::Left);
 					FToggle(Vars::Misc::Automation::AutoReport, FToggleEnum::Right);
 					FToggle(Vars::Misc::Automation::AutoDisguise, FToggleEnum::Left);
-					FToggle(Vars::Misc::Automation::JoinSpam, FToggleEnum::Left); // i think it doesnt work anymore but dh wanted it so here it is
 				} EndSection();
 				if (Section("Voting", 8))
 				{
@@ -1919,12 +1907,9 @@ void CMenu::MenuMisc(int iTab)
 					PushTransparent(!Vars::Misc::Movement::NavEngine::Enabled.Value);
 					{
 						FDropdown(Vars::Misc::Movement::NavEngine::Draw, FDropdownEnum::Multi, -60);
-						FColorPicker(Vars::Colors::NavbotPath, FColorPickerEnum::SameLine, {}, { H::Draw.Scale(10), H::Draw.Scale(40) });
-						FColorPicker(Vars::Colors::NavbotPossiblePath, FColorPickerEnum::SameLine, {}, { H::Draw.Scale(10), H::Draw.Scale(40) });
-						// debug only and it crashes
-						// FColorPicker(Vars::Colors::NavbotWalkablePath, FColorPickerEnum::SameLine, {}, { H::Draw.Scale(10), H::Draw.Scale(40) });
-						FColorPicker(Vars::Colors::NavbotArea, FColorPickerEnum::SameLine, {}, { H::Draw.Scale(10), H::Draw.Scale(40) });
-						FColorPicker(Vars::Colors::NavbotBlacklist, FColorPickerEnum::SameLine, {}, { H::Draw.Scale(10), H::Draw.Scale(40) });
+						FColorPicker(Vars::Colors::NavbotPath, FColorPickerEnum::Left);
+						FColorPicker(Vars::Colors::NavbotArea, FColorPickerEnum::Left);
+						FColorPicker(Vars::Colors::NavbotBlacklist, FColorPickerEnum::Right);
 
 						FSlider(Vars::Misc::Movement::NavEngine::StickyIgnoreTime, FSliderEnum::Left);
 						FSlider(Vars::Misc::Movement::NavEngine::StuckDetectTime, FSliderEnum::Right);
@@ -1967,8 +1952,8 @@ void CMenu::MenuMisc(int iTab)
 						FTooltip("Distance at which followbot abandons the target completely.");
 					PopTransparent();
 					FToggle(Vars::Misc::Movement::FollowBot::DrawPath, FToggleEnum::Left);
-					FColorPicker(Vars::Colors::FollowbotPathLine, FColorPickerEnum::SameLine);
-					FColorPicker(Vars::Colors::FollowbotPathBox, FColorPickerEnum::SameLine);
+					FColorPicker(Vars::Colors::FollowbotPathLine, FColorPickerEnum::Left);
+					FColorPicker(Vars::Colors::FollowbotPathBox, FColorPickerEnum::Right);
 				} EndSection();
 				if (Section("Bot Utils"))
 				{
@@ -2134,8 +2119,6 @@ void CMenu::MenuMisc(int iTab)
 				} EndSection();
 				if (Section("Casual automation", 8))
 				{
-					FToggle(Vars::Misc::Queueing::MapPopularizing, FToggleEnum::Left);
-					FToggle(Vars::Misc::Queueing::MapBarBoost, FToggleEnum::Right);
 					PushTransparent(!Vars::Misc::Queueing::AutoCasualQueue.Value);
 					{
 						FToggle(Vars::Misc::Queueing::AutoAbandonIfNoNavmesh, FToggleEnum::Left);
@@ -2171,23 +2154,6 @@ void CMenu::MenuMisc(int iTab)
 						FToggle(Vars::Misc::Queueing::RQnoAbandon, FToggleEnum::Right);
 						FToggle(Vars::Misc::Queueing::RQIgnoreFriends, FToggleEnum::Left);
 						FToggle(Vars::Misc::Queueing::RQLTM, FToggleEnum::Right);
-					}
-					PopTransparent();
-				} EndSection();
-				if (Section("Community", 8))
-				{
-					FToggle(Vars::Misc::Queueing::AutoCommunityQueue);
-					PushTransparent(!Vars::Misc::Queueing::AutoCommunityQueue.Value);
-					{
-						FSlider(Vars::Misc::Queueing::ServerSearchDelay, FSliderEnum::Left);
-						FSlider(Vars::Misc::Queueing::MaxTimeOnServer, FSliderEnum::Right);
-						FSlider(Vars::Misc::Queueing::MinPlayersOnServer, FSliderEnum::Left);
-						FSlider(Vars::Misc::Queueing::MaxPlayersOnServer, FSliderEnum::Right);
-						FToggle(Vars::Misc::Queueing::RequireNavmesh, FToggleEnum::Left);
-						FToggle(Vars::Misc::Queueing::AvoidPasswordServers, FToggleEnum::Right);
-						FToggle(Vars::Misc::Queueing::OnlyNonDedicatedServers, FToggleEnum::Left);
-						FToggle(Vars::Misc::Queueing::OnlySteamNetworkingIPs, FToggleEnum::Right);
-						FToggle(Vars::Misc::Queueing::PreferSteamNickServers, FToggleEnum::Left);
 					}
 					PopTransparent();
 				} EndSection();
@@ -2257,63 +2223,6 @@ void CMenu::MenuAnticheat(int iTab)
 	// Cheaters
 	case 0:
 	{
-		if (Section("API key"))
-		{
-			static std::string sAPIKeyBuffer = Vars::Config::SteamWebAPIKey.Value;
-			static bool bEditingApiKey = false;
-			static bool bRevealApiKey = false;
-			if (!bEditingApiKey && sAPIKeyBuffer != Vars::Config::SteamWebAPIKey.Value)
-				sAPIKeyBuffer = Vars::Config::SteamWebAPIKey.Value;
-
-			const float flRowHeight = H::Draw.Scale(36);
-			SetCursorPosY(GetCursorPosY() + H::Draw.Scale(4));
-			const ImGuiInputTextFlags nApiKeyFlags = (bRevealApiKey ? 0 : ImGuiInputTextFlags_Password) | ImGuiInputTextFlags_EnterReturnsTrue;
-			bool bSubmitted = false;
-			bool bFinished = false;
-			if (BeginTable("APIKeyRow", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoPadInnerX))
-			{
-				TableSetupColumn("Key", ImGuiTableColumnFlags_WidthStretch);
-				TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, H::Draw.Scale(150));
-				TableNextRow(ImGuiTableRowFlags_None, flRowHeight);
-				TableSetColumnIndex(0);
-				SetCursorPosY(GetCursorPosY() + H::Draw.Scale(2));
-				const float flInputWidth = std::max(GetContentRegionAvail().x - H::Draw.Scale(6), H::Draw.Scale(160));
-				bSubmitted = FInputText("Steam Web API key", sAPIKeyBuffer, flInputWidth, nApiKeyFlags);
-				bFinished = bSubmitted || IsItemDeactivatedAfterEdit();
-				bEditingApiKey = IsItemActive();
-
-				TableSetColumnIndex(1);
-				BeginGroup();
-				PushStyleVar(ImGuiStyleVar_FrameRounding, H::Draw.Scale(8));
-				PushStyleColor(ImGuiCol_Button, F::Render.Background0.Value);
-				PushStyleColor(ImGuiCol_ButtonHovered, F::Render.Background0p5.Value);
-				PushStyleColor(ImGuiCol_ButtonActive, F::Render.Background1.Value);
-				if (IconButton(bRevealApiKey ? ICON_MD_VISIBILITY : ICON_MD_VISIBILITY_OFF, flRowHeight))
-					bRevealApiKey = !bRevealApiKey;
-				PopStyleColor(3);
-				SameLine(0.f, H::Draw.Scale(6));
-				const ImVec2 vGetKeySize = { H::Draw.Scale(90), flRowHeight };
-				if (Button("GET KEY", vGetKeySize))
-					ShellExecuteA(NULL, "open", "https://steamcommunity.com/dev/apikey", NULL, NULL, SW_SHOWNORMAL);
-				PopStyleVar();
-				EndGroup();
-				EndTable();
-			}
-
-			if (bFinished && sAPIKeyBuffer != Vars::Config::SteamWebAPIKey.Value)
-			{
-				Vars::Config::SteamWebAPIKey.Map[DEFAULT_BIND] = sAPIKeyBuffer;
-				Vars::Config::SteamWebAPIKey.Value = sAPIKeyBuffer;
-				SDK::Output("steamwebapi", sAPIKeyBuffer.empty() ? "Cleared API key" : "Saved steamwebapi key", { 175, 150, 255, 255 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
-			}
-
-			PushStyleColor(ImGuiCol_Text, F::Render.Inactive.Value);
-			FText("Used for downloading names and avatars via GetPlayerSummaries.");
-			if (Vars::Config::SteamWebAPIKey.Value.empty())
-				FText("Set a key to enable lookups for non-friends.");
-			PopStyleColor();
-		}
-		EndSection();
 		if (Section("Cheater List"))
 		{
 			static std::string cheater_search = "";
@@ -2540,11 +2449,9 @@ void CMenu::MenuAnticheat(int iTab)
 							});
 							PopupSelectable("Refetch profile", ICON_MD_SYNC, tAccent, [&]
 							{
-								ResetAvatarTexture(tEntry.first);
-								F::SteamProfileCache.Invalidate(tEntry.first);
-								F::SteamProfileCache.TouchAvatar(tEntry.first);
+								F::SteamProfileCache.Refresh(tEntry.first);
 								const auto uSteamID64 = CSteamID(tEntry.first, k_EUniversePublic, k_EAccountTypeIndividual).ConvertToUint64();
-								SDK::Output("steamwebapi", std::format("Queued profile refetch for {}", uSteamID64).c_str(), { 175, 150, 255, 255 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
+								SDK::Output("SteamProfileCache", std::format("Queued native profile refresh for {}", uSteamID64).c_str(), { 175, 150, 255, 255 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
 							});
 
 							Dummy({ 0, H::Draw.Scale(4) });
@@ -3536,11 +3443,9 @@ void CMenu::MenuLogs(int iTab)
 						});
 						fPopupSelectable(std::format("Marked{}", tEntry.m_uAccountID), iPopupRow, "Refetch profile", ICON_MD_SYNC, tAccent, [&]
 						{
-							ResetAvatarTexture(tEntry.m_uAccountID);
-							F::SteamProfileCache.Invalidate(tEntry.m_uAccountID);
-							F::SteamProfileCache.TouchAvatar(tEntry.m_uAccountID);
+							F::SteamProfileCache.Refresh(tEntry.m_uAccountID);
 							const auto uSteamID64 = CSteamID(tEntry.m_uAccountID, k_EUniversePublic, k_EAccountTypeIndividual).ConvertToUint64();
-							SDK::Output("steamwebapi", std::format("Queued profile refetch for {}", uSteamID64).c_str(), { 175, 150, 255, 255 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
+							SDK::Output("SteamProfileCache", std::format("Queued native profile refresh for {}", uSteamID64).c_str(), { 175, 150, 255, 255 }, OUTPUT_CONSOLE | OUTPUT_DEBUG | OUTPUT_MENU);
 						});
 
 						Dummy({ 0, H::Draw.Scale(4) });
@@ -3874,26 +3779,6 @@ void CMenu::MenuLogs(int iTab)
 					FDropdown(Vars::Logging::NotificationPosition);
 					FSlider(Vars::Logging::NotificationTime);
 					FSlider(Vars::Logging::MaxNotifications);
-				} EndSection();
-				if (Section("Cheat Detection"))
-				{
-					FDropdown(Vars::CheatDetection::Methods);
-					PushTransparent(!Vars::CheatDetection::DetectionsRequired.Value);
-					{
-						FSlider(Vars::CheatDetection::DetectionsRequired);
-					}
-					PopTransparent();
-					PushTransparent(!(Vars::CheatDetection::Methods.Value & Vars::CheatDetection::MethodsEnum::PacketChoking));
-					{
-						FSlider(Vars::CheatDetection::MinChoking);
-					}
-					PopTransparent();
-					PushTransparent(!(Vars::CheatDetection::Methods.Value & Vars::CheatDetection::MethodsEnum::AimFlicking));
-					{
-						FSlider(Vars::CheatDetection::MinFlick, FSliderEnum::Left);
-						FSlider(Vars::CheatDetection::MaxNoise, FSliderEnum::Right);
-					}
-					PopTransparent();
 				} EndSection();
 			}
 			/* Column 2 */
@@ -5699,7 +5584,6 @@ void CMenu::Render()
 	{
 		DrawNotifications();
 		ManageVars();
-		DrawMenu();
 
 		AddDraggable("Ticks", Vars::Menu::TicksDisplay, FGet(Vars::Menu::Indicators) & Vars::Menu::IndicatorsEnum::Ticks);
 		AddDraggable("Crit hack", Vars::Menu::CritsDisplay, FGet(Vars::Menu::Indicators) & Vars::Menu::IndicatorsEnum::CritHack);
@@ -5709,6 +5593,8 @@ void CMenu::Render()
 		AddDraggable("Seed prediction", Vars::Menu::SeedPredictionDisplay, FGet(Vars::Menu::Indicators) & Vars::Menu::IndicatorsEnum::SeedPrediction);
 		AddDraggable("Nav bot", Vars::Menu::NavBotDisplay, FGet(Vars::Menu::Indicators) & Vars::Menu::IndicatorsEnum::NavBot);
 		AddResizableDraggable("Camera", Vars::Visuals::Simulation::ProjectileWindow, FGet(Vars::Visuals::Simulation::ProjectileCamera), OptionalConstraints);
+
+		DrawMenu();
 
 		F::Render.Cursor = GetMouseCursor();
 		m_bWindowHovered = IsWindowHovered(ImGuiHoveredFlags_AnyWindow | ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);

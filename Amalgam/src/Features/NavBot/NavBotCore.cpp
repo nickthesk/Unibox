@@ -126,11 +126,6 @@ void CNavBotCore::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 
 	if (Vars::Debug::Info.Value)
 	{
-		for (const auto& segment : F::BotUtils.m_vWalkableSegments)
-		{
-			G::LineStorage.push_back({ { segment.first, segment.second }, I::GlobalVars->curtime + I::GlobalVars->interval_per_tick * 2.f, { 0, 255, 0, 255 } });
-		}
-
 		if (F::BotUtils.m_vPredictedJumpPos.Length() > 0.f)
 		{
 			G::LineStorage.push_back({ { pLocal->GetAbsOrigin(), F::BotUtils.m_vPredictedJumpPos }, I::GlobalVars->curtime + I::GlobalVars->interval_per_tick * 2.f, { 255, 255, 0, 255 } });
@@ -488,7 +483,7 @@ void CNavBotCore::Draw(CTFPlayer* pLocal)
 	int y = Vars::Menu::NavBotDisplay.Value.y + 8;
 	const auto& f_font = H::Fonts.GetFont(FONT_INDICATORS);
 	const int n_tall = f_font.m_nTall + H::Draw.Scale(1);
-	ImDrawList* p_draw_list = ImGui::GetForegroundDrawList();
+	ImDrawList* p_draw_list = ImGui::GetBackgroundDrawList();
 
 	EAlign e_align = ALIGN_TOP;
 	if (x <= 100 + H::Draw.Scale(50, Scale_Round))

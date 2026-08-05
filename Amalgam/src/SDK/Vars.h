@@ -171,7 +171,6 @@ public:
 NAMESPACE_BEGIN(Vars)
 	NAMESPACE_BEGIN(Config)
 		CVar(LoadDebugSettings, "Load debug settings", false);
-		CVar(SteamWebAPIKey, "steamwebapi key", std::string(""), NOBIND);
 	NAMESPACE_END(Config)
 	
 	NAMESPACE_BEGIN(Menu)
@@ -259,8 +258,6 @@ NAMESPACE_BEGIN(Vars)
 		CVar(RealPathIgnoreZ, "Real path ignore Z color", Color_t(255, 255, 255, 255), NOSAVE | DEBUGVAR);
 
 		CVar(NavbotPath, "Navbot path color", Color_t(255, 255, 0, 255), VISUAL);
-		CVar(NavbotPossiblePath, "Navbot possible path color", Color_t(255, 255, 255, 100), VISUAL);
-		CVar(NavbotWalkablePath, "Navbot walkable path color", Color_t(0, 255, 255, 200), VISUAL);
 		CVar(NavbotArea, "Navbot area color", Color_t(0, 255, 0, 255), VISUAL);
 		CVar(NavbotBlacklist, "Navbot blacklisted color", Color_t(255, 0, 0, 255), VISUAL);
 		CVar(FollowbotPathLine, "Followbot path line color", Color_t(255, 255, 0, 255), VISUAL);
@@ -294,10 +291,7 @@ NAMESPACE_BEGIN(Vars)
 			CVarEnum(Ignore, "Ignore", 0b00000001000, DROPDOWN_MULTI, nullptr,
 				VA_LIST("Friends", "Party", "Unprioritized", "Invulnerable", "Invisible", "Unsimulated", "Dead ringer", "Vaccinator", "Disguised", "Taunting", "Team", "Sentry busters"),
 				Friends = 1 << 0, Party = 1 << 1, Unprioritized = 1 << 2, Invulnerable = 1 << 3, Invisible = 1 << 4, Unsimulated = 1 << 5, DeadRinger = 1 << 6, Vaccinator = 1 << 7, Disguised = 1 << 8, Taunting = 1 << 9, Team = 1 << 10, SentryBusters = 1 << 11);
-			CVarEnum(BypassIgnore, "Bypass ignore", 0, DROPDOWN_MULTI, nullptr,
-				VA_LIST("Friends", "Ignored", "Local bots"),
-				Friends = 1 << 0, Ignored = 1 << 1, LocalBots = 1 << 2);
-			CVar(AimFOV, "Aim FOV", 180.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 360.f);
+			CVar(AimFOV, "Aim FOV", 180.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 180.f);
 			CVar(MaxTargets, "Max targets", 2, SLIDER_MIN, 1, 6);
 			CVar(IgnoreInvisible, "Ignore invisible", 50.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 10.f, "%g%%");
 			CVar(AssistStrength, "Assist strength", 25.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 1.f, "%g%%");
@@ -310,8 +304,6 @@ NAMESPACE_BEGIN(Vars)
 			CVar(FOVCircle, "FOV Circle", true, VISUAL);
 			CVar(LeadAndRestrict, "Lead and restrict", false, VISUAL);
 			CVar(NoSpread, "No spread", false);
-			CVar(PrioritizeNavbot, "Prioritize navbot target", false);
-			CVar(PrioritizeFollowbot, "Prioritize followbot target", false);
 
 			CVarEnum(AimHoldsFire, "Aim holds fire", 2, NOSAVE | DEBUGVAR, nullptr,
 				VA_LIST("False", "Minigun only", "Always"),
@@ -367,6 +359,7 @@ NAMESPACE_BEGIN(Vars)
 			CVar(SplashRadius, "Splash radius", 100.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 10.f, "%g%%");
 			CVar(AutoRelease, "Auto release", 0.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 5.f, "%g%%");
 			CVar(GrapplingHookAim, "Grappling hook aim", false);
+			CVar(AutoSCMetalAmount, "Auto short circuit min metal", 0, SLIDER_CLAMP, 0, 195, 65);
 
 			CVar(GroundSamples, "Samples", 33, NOSAVE | DEBUGVAR, 3, 66);
 			CVar(GroundStraightFuzzyValue, "Straight fuzzy value", 100.f, NOSAVE | DEBUGVAR | SLIDER_PRECISION, 0.f, 500.f, 25.f);
@@ -459,8 +452,8 @@ NAMESPACE_BEGIN(Vars)
 
 		NAMESPACE_BEGIN(Healing)
 			CVarEnum(HealPriority, "Heal priority", 0, NONE, nullptr,
-				VA_LIST("None", "Prioritize team", "Prioritize friends", "Friends only"),
-				None, PrioritizeTeam, PrioritizeFriends, FriendsOnly);
+				VA_LIST("None", "Prioritize team", "Prioritize friends", "Prioritize party", "Friends only"),
+				None, PrioritizeTeam, PrioritizeFriends, PrioritizeParty, FriendsOnly);
 			CVarEnum(DangerIgnore, "Danger ignore", 0b1000, DROPDOWN_MULTI, nullptr,
 				VA_LIST("Friends", "Party", "Unprioritized", "Ignored"),
 				Friends = 1 << 0, Party = 1 << 1, Unprioritized = 1 << 2, Ignored = 1 << 3,
@@ -527,10 +520,6 @@ NAMESPACE_BEGIN(Vars)
 	NAMESPACE_BEGIN(AutoPeek, Auto Peek)
 		CVar(Enabled, VA_LIST("Enabled", "Auto peek"), false);
 	NAMESPACE_END(AutoPeek)
-
-	NAMESPACE_BEGIN(Speedhack)
-		CVar(Scale, VA_LIST("Scale", "SpeedHack scale"), 1, NONE, 1, 50);
-	NAMESPACE_END(Speedhack)
 
 	NAMESPACE_BEGIN(AntiAim, Antiaim)
 		CVar(Enabled, VA_LIST("Enabled", "Antiaim enabled"), false);
@@ -809,8 +798,6 @@ I dont think this is a good idea to disable simulations completely:
 			CVar(FastStop, "Fast stop", false);
 			CVar(FastAccelerate, "Fast accelerate", false);
 			CVar(DuckSpeed, "Duck speed", false);
-			CVar(DuckSpeedNavbotCompat, "Duck speed navbot compatibility", false);
-			CVar(DuckSpeedForward, "Duck speed forward", false);
 			CVar(ShieldTurnRate, "Shield turn rate", false);
 			CVar(NoPush, "No push", false);
 			CVar(MovementLock, "Movement lock", false);
@@ -819,8 +806,8 @@ I dont think this is a good idea to disable simulations completely:
 				CVar(Enabled, VA_LIST("Enabled", "Nav engine enabled"), false);
 				CVar(PathInSetup, "Path in setup time", false);
 				CVarEnum(Draw, "Draw", 0b011, VISUAL | DROPDOWN_MULTI, nullptr,
-					VA_LIST("Path", "Areas", "Blacklisted zones", "Possible paths", "Walkable (Debug)"),
-					Path = 1 << 0, Area = 1 << 1, Blacklist = 1 << 2, PossiblePaths = 1 << 3, Walkable = 1 << 4);
+					VA_LIST("Path", "Areas", "Blacklisted zones"),
+					Path = 1 << 0, Area = 1 << 1, Blacklist = 1 << 2);
 				CVarEnum(LookAtPath, "Look at path", 0, NONE, nullptr,
 					VA_LIST("Off", "Plain", "Silent", "Legit", "Legit silent"),
 					Off, Plain, Silent, Legit, LegitSilent);
@@ -1146,7 +1133,6 @@ I dont think this is a good idea to disable simulations completely:
 				Scout = 1 << 0, Sniper = 1 << 1, Soldier = 1 << 2, Demoman = 1 << 3, Medic = 1 << 4, Heavy = 1 << 5, Pyro = 1 << 6, Spy = 1 << 7, Engineer = 1 << 8);
 			CVar(RandomClassInterval, "Random class interval", FloatRange_t(3.f, 5.f), SLIDER_MIN | SLIDER_PRECISION, 0.5f, 30.f, 0.5f, "%g - %gm");
 			CVar(ForceClass, "Autojoin class", 0);
-			CVar(JoinSpam, "Join spam", false);
 			CVar(Micspam, "Micspam", false);
 			CVar(NoiseSpam, "Noise spam", false);
 			CVar(CallVoteSpam, "Callvote spam", false);
@@ -1252,8 +1238,6 @@ I dont think this is a good idea to disable simulations completely:
 			CVar(AutoCasualQueue, "Auto casual queue", false);
 			CVar(AutoCasualJoin, "Auto casual join", false);
 			CVar(AutoCompetitiveQueue, "Auto competitive queue", false);
-			CVar(MapPopularizing, "Map popularizing mode", false);
-			CVar(MapBarBoost, "Boost Playercount Visualizer", false);
 			CVar(AutoAbandonIfNoNavmesh, "Auto abandon if no navmesh", false);
 			CVar(AutoDumpProfiles, "Auto dump profiles", false);
 			CVar(AutoDumpDelay, "Auto dump delay", 15, SLIDER_CLAMP, 0, 120, 1, "%is");
@@ -1265,16 +1249,6 @@ I dont think this is a good idea to disable simulations completely:
 			CVar(RQLTM, "dont RQLTM", false);
 			CVar(RQIgnoreFriends, "Ignore Friends", false);
 			CVar(RQnoAbandon, "RQ w/o abandon", false);
-			CVar(AutoCommunityQueue, "Auto community queue", false);
-			CVar(ServerSearchDelay, "Server search delay", 30, SLIDER_MIN, 10, 300, 5, "%is");
-			CVar(MaxTimeOnServer, "Max time on server", 600, SLIDER_MIN, 60, 3600, 30, "%is");
-			CVar(MinPlayersOnServer, "Min players on server", 6, SLIDER_MIN, 0, 32, 1, "%i");
-			CVar(MaxPlayersOnServer, "Max players on server", 24, SLIDER_MIN, 1, 32, 1, "%i");
-			CVar(RequireNavmesh, "Require navmesh", true);
-			CVar(AvoidPasswordServers, "Avoid password servers", true);
-			CVar(OnlyNonDedicatedServers, "Only non-dedicated servers", false);
-			CVar(OnlySteamNetworkingIPs, "Only SteamNetworking IPs (169.254.*)", false);
-			CVar(PreferSteamNickServers, "Prefer '*'s Server' format", true);
 			CVar(AutoMannUpQueue, "Auto MannUp queue", false);
 		NAMESPACE_END(Queueing)
 

@@ -24,7 +24,6 @@ private:
 	void VoiceCommandSpam(CTFPlayer* pLocal);
 	void ChatSpam(CTFPlayer* pLocal);
 	void AutoDisguise(CTFPlayer* pLocal);
-	void JoinSpam(CTFPlayer* pLocal);
 
 	void AchievementSpam(CTFPlayer* pLocal);
 	void NoiseSpam(CTFPlayer* pLocal);
@@ -36,6 +35,7 @@ private:
 	void WeaponSway();
 
 	void TauntKartControl(CTFPlayer* pLocal, CUserCmd* pCmd);
+	void AutoCrouchNavbot(CTFPlayer* pLocal, CUserCmd* pCmd);
 	void FastMovement(CTFPlayer* pLocal, CUserCmd* pCmd);
 
 	void AutoPeek(CTFPlayer* pLocal, CUserCmd* pCmd, bool bPost = false);
@@ -51,6 +51,7 @@ private:
 	bool m_bEdgeBugCrouch = false;
 	bool m_bEdgeBugRepredict = false;
 	bool m_bEdgeBug = false;
+	bool m_bDuckSpeedActive = false;
 	std::vector<Vec3> m_vEdgebugPath;
 
 	bool m_bPeekPlaced = false;
@@ -122,6 +123,7 @@ public:
 
 	void RunPre(CTFPlayer* pLocal, CUserCmd* pCmd);
 	void RunPost(CTFPlayer* pLocal, CUserCmd* pCmd);
+	bool IsDuckSpeedActive() const { return m_bDuckSpeedActive; }
 
 	void Event(IGameEvent* pEvent, uint32_t uNameHash);
 	int AntiBackstab(CTFPlayer* pLocal, CUserCmd* pCmd);
